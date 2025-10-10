@@ -1,0 +1,121 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environments
+venv/
+ENV/
+env/
+.venv
+
+# Environment Variables
+.env
+.env.local
+.env.*.local
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.hypothesis/
+
+# Logs
+logs/
+*.log
+log/
+
+# Data & Databases
+data/vector_store/
+data/cache/
+*.db
+*.sqlite
+*.sqlite3
+
+# Redis
+dump.rdb
+
+# Models (if storing locally)
+models/
+*.bin
+*.ckpt
+*.pth
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Docker
+.dockerignore
+
+# Secrets
+secrets/
+*.pem
+*.key
+*.crt
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Backup files
+*.bak
+*.backup
+backup/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# API Keys (extra safety)
+*_key.txt
+api_keys.txt
+credentials.json
+
+# Test files (don't commit to production)
+test_*.py
+*_test.py
+comprehensive_check.py
+test_vectordb_fixed.py
+simple_test.py
+
+# SSL certificates (production)
+config/nginx/ssl/*.pem
+config/nginx/ssl/*.key
+config/nginx/.htpasswd
+
+# Monitoring data
+prometheus_data/
+grafana_data/
+
+# Frontend
+frontend/web/frontend-web/web-test/node_modules/
+frontend/web/frontend-web/web-test/dist/
+frontend/web/frontend-web/web-test/.env.local

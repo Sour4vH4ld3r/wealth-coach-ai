@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wealth Coach AI - API Tester</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            color: #667eea;
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            color: #666;
+            font-size: 1.1rem;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        .card h2 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 1.5rem;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #555;
+            font-weight: 500;
+        }
+
+        input, textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        input:focus, textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            width: 100%;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .status {
+            margin-top: 15px;
+            padding: 15px;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+
+        .chat-messages {
+            max-height: 400px;
+            overflow-y: auto;
+            margin-top: 20px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            padding: 15px;
+            background: #f9f9f9;
+        }
+
+        .message {
+            margin-bottom: 15px;
+            padding: 12px;
+            border-radius: 6px;
+        }
+
+        .message.user {
+            background: #e3f2fd;
+            margin-left: 40px;
+        }
+
+        .message.assistant {
+            background: #f3e5f5;
+            margin-right: 40px;
+        }
+
+        .message-role {
+            font-weight: 600;
+            margin-bottom: 5px;
+            color: #667eea;
+        }
+
+        .message-content {
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .token-info {
+            font-size: 12px;
+            color: #999;
+            margin-top: 5px;
+        }
+
+        .logout-btn {
+            background: #dc3545;
+            margin-top: 10px;
+        }
+
+        .logout-btn:hover {
+            box-shadow: 0 5px 15px rgba(220, 53, 69, 0.4);
+        }
+
+        .full-width {
+            grid-column: 1 / -1;
+        }
+
+        code {
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        function App() {
+            const [token, setToken] = useState(localStorage.getItem('token') || '');
+            const [user, setUser] = useState(null);
+            const [registerStatus, setRegisterStatus] = useState('');
+            const [loginStatus, setLoginStatus] = useState('');
+            const [chatStatus, setChatStatus] = useState('');
+            const [chatMessages, setChatMessages] = useState([]);
+            const [showOnboarding, setShowOnboarding] = useState(false);
+            const [onboardingStatus, setOnboardingStatus] = useState('');
+            const [onboardingCompleted, setOnboardingCompleted] = useState(false);
+            const [currentSessionId, setCurrentSessionId] = useState(null);
+
+            const API_URL = 'http://localhost:8000';
+
+            useEffect(() => {
+                if (token) {
+                    localStorage.setItem('token', token);
+                    checkOnboardingStatus();
+                }
+            }, [token]);
+
+            const checkOnboardingStatus = async () => {
+                try {
+                    const response = await fetch(`${API_URL}/api/v1/onboarding/status`, {
+                        headers: {
+                            'Authorization': `Bearer ${token}`
+                        }
+                    });
+                    const data = await response.json();
+                    if (!data.onboarding_completed) {
+                        setShowOnboarding(true);
+                        setOnboardingCompleted(false);
+                    } else {
+                        setOnboardingCompleted(true);
+                    }
+                } catch (error) {
+                    console.error('Error checking onboarding status:', error);
+                }
+            };
+
+            const handleRegister = async (e) => {
+                e.preventDefault();
+                const formData = new FormData(e.target);
+                setRegisterStatus('⏳ Registering...');
+
+                try {
+                    const response = await fetch(`${API_URL}/api/v1/auth/register`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            email: formData.get('reg_email'),
+                            password: formData.get('reg_password'),
+                            full_name: formData.get('reg_name')
+                        })
+                    });
+
+                    const data = await response.json();
+
+                    if (response.ok) {
+                        setToken(data.access_token);
+                        setUser({ email: formData.get('reg_email') });
+                        setRegisterStatus(`✅ Success! Registered and logged in.`);
+                        setShowOnboarding(true);
+                        e.target.reset();
+                    } else {
+                        setRegisterStatus(`❌ Error: ${data.detail}`);
+                    }
+                } catch (error) {
+                    setRegisterStatus(`❌ Error: ${error.message}`);
+                }
+            };
+
+            const handleOnboarding = async (e) => {
+                e.preventDefault();
+                const formData = new FormData(e.target);
+                setOnboardingStatus('⏳ Submitting profile...');
+
+                try {
+                    const response = await fetch(`${API_URL}/api/v1/onboarding/submit`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`
+                        },
+                        body: JSON.stringify({
+                            age_range: formData.get('age_range'),
+                            occupation: formData.get('occupation'),
+                            income_range: formData.get('income_range'),
+                            financial_goals: formData.get('financial_goals'),
+                            investment_experience: formData.get('investment_experience'),
+                            risk_tolerance: formData.get('risk_tolerance'),
+                            current_investments: formData.get('current_investments'),
+                            debt_status: formData.get('debt_status'),
+                            retirement_planning: formData.get('retirement_planning') === 'yes',
+                            interests: formData.get('interests')
+                        })
+                    });
+
+                    const data = await response.json();
+
+                    if (response.ok) {
+                        setOnboardingStatus(`✅ ${data.message}`);
+                        setOnboardingCompleted(true);
+                        setShowOnboarding(false);
+                    } else {
+                        setOnboardingStatus(`❌ Error: ${data.detail}`);
+                    }
+                } catch (error) {
+                    setOnboardingStatus(`❌ Error: ${error.message}`);
+                }
+            };
+
+            const handleLogin = async (e) => {
+                e.preventDefault();
+                const formData = new FormData(e.target);
+                setLoginStatus('⏳ Logging in...');
+
+                try {
+                    const response = await fetch(`${API_URL}/api/v1/auth/login`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            email: formData.get('login_email'),
+                            password: formData.get('login_password')
+                        })
+                    });
+
+                    const data = await response.json();
+
+                    if (response.ok) {
+                        setToken(data.access_token);
+                        setUser({ email: formData.get('login_email') });
+                        setLoginStatus(`✅ Success! Logged in.`);
+                        e.target.reset();
+                    } else {
+                        setLoginStatus(`❌ Error: ${data.detail}`);
+                    }
+                } catch (error) {
+                    setLoginStatus(`❌ Error: ${error.message}`);
+                }
+            };
+
+            const handleChat = async (e) => {
+                e.preventDefault();
+                const formData = new FormData(e.target);
+                const message = formData.get('message');
+
+                if (!message.trim()) return;
+
+                setChatStatus('⏳ Sending message...');
+
+                // Add user message to chat
+                const userMessage = { role: 'user', content: message, timestamp: new Date() };
+                setChatMessages(prev => [...prev, userMessage]);
+
+                try {
+                    const response = await fetch(`${API_URL}/api/v1/chat/message`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`
+                        },
+                        body: JSON.stringify({
+                            message: message,
+                            conversation_history: chatMessages.slice(-6),
+                            use_rag: true,
+                            session_id: currentSessionId
+                        })
+                    });
+
+                    const data = await response.json();
+
+                    if (response.ok) {
+                        // Save the conversation_id from response for continuing the conversation
+                        if (data.conversation_id && !currentSessionId) {
+                            setCurrentSessionId(data.conversation_id);
+                        }
+
+                        const assistantMessage = {
+                            role: 'assistant',
+                            content: data.response,
+                            timestamp: new Date(),
+                            tokens_used: data.tokens_used,
+                            sources_count: data.sources?.length || 0,
+                            cached: data.cached
+                        };
+                        setChatMessages(prev => [...prev, assistantMessage]);
+                        setChatStatus(`✅ Response received! (${data.tokens_used} tokens, ${data.sources?.length || 0} sources)${data.conversation_id ? ' | Session: ' + data.conversation_id.substring(0, 8) + '...' : ''}`);
+                        e.target.reset();
+                    } else {
+                        setChatStatus(`❌ Error: ${data.detail}`);
+                    }
+                } catch (error) {
+                    setChatStatus(`❌ Error: ${error.message}`);
+                }
+            };
+
+            const handleLogout = () => {
+                setToken('');
+                setUser(null);
+                setChatMessages([]);
+                setCurrentSessionId(null);
+                localStorage.removeItem('token');
+                setLoginStatus('');
+                setRegisterStatus('');
+                setChatStatus('');
+            };
+
+            return (
+                <div className="container">
+                    <div className="header">
+                        <h1>💰 Wealth Coach AI</h1>
+                        <p>API Testing Interface</p>
+                        {user && (
+                            <div style={{ marginTop: '15px' }}>
+                                <p style={{ color: '#667eea', fontWeight: 'bold' }}>
+                                    Logged in as: {user.email}
+                                </p>
+                                <button className="logout-btn" onClick={handleLogout}>
+                                    Logout
+                                </button>
+                            </div>
+                        )}
+                    </div>
+
+                    {!token ? (
+                        <div className="grid">
+                            <div className="card">
+                                <h2>📝 Register</h2>
+                                <form onSubmit={handleRegister}>
+                                    <div className="form-group">
+                                        <label>Full Name</label>
+                                        <input type="text" name="reg_name" required placeholder="John Doe" />
+                                    </div>
+                                    <div className="form-group">
+                                        <label>Email</label>
+                                        <input type="email" name="reg_email" required placeholder="john@example.com" />
+                                    </div>
+                                    <div className="form-group">
+                                        <label>Password</label>
+                                        <input type="password" name="reg_password" required placeholder="Min 8 chars, 1 uppercase, 1 special" />
+                                    </div>
+                                    <button type="submit">Register</button>
+                                    {registerStatus && (
+                                        <div className={`status ${registerStatus.includes('✅') ? 'success' : 'error'}`}>
+                                            {registerStatus}
+                                        </div>
+                                    )}
+                                </form>
+                            </div>
+
+                            <div className="card">
+                                <h2>🔐 Login</h2>
+                                <form onSubmit={handleLogin}>
+                                    <div className="form-group">
+                                        <label>Email</label>
+                                        <input type="email" name="login_email" required placeholder="john@example.com" />
+                                    </div>
+                                    <div className="form-group">
+                                        <label>Password</label>
+                                        <input type="password" name="login_password" required placeholder="Your password" />
+                                    </div>
+                                    <button type="submit">Login</button>
+                                    {loginStatus && (
+                                        <div className={`status ${loginStatus.includes('✅') ? 'success' : 'error'}`}>
+                                            {loginStatus}
+                                        </div>
+                                    )}
+                                </form>
+                            </div>
+                        </div>
+                    ) : showOnboarding ? (
+                        <div className="grid">
+                            <div className="card full-width">
+                                <h2>📋 Complete Your Profile</h2>
+                                <p style={{ marginBottom: '20px', color: '#666' }}>
+                                    Help us personalize your financial advice by telling us a bit about yourself.
+                                </p>
+                                <form onSubmit={handleOnboarding}>
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '15px' }}>
+                                        <div className="form-group">
+                                            <label>Age Range</label>
+                                            <select name="age_range" style={{ width: '100%', padding: '12px', border: '2px solid #e0e0e0', borderRadius: '6px' }}>
+                                                <option value="">Select...</option>
+                                                <option value="18-24">18-24</option>
+                                                <option value="25-34">25-34</option>
+                                                <option value="35-44">35-44</option>
+                                                <option value="45-54">45-54</option>
+                                                <option value="55-64">55-64</option>
+                                                <option value="65+">65+</option>
+                                            </select>
+                                        </div>
+                                        <div className="form-group">
+                                            <label>Occupation</label>
+                                            <input type="text" name="occupation" placeholder="e.g., Software Engineer" />
+                                        </div>
+                                        <div className="form-group">
+                                            <label>Income Range</label>
+                                            <select name="income_range" style={{ width: '100%', padding: '12px', border: '2px solid #e0e0e0', borderRadius: '6px' }}>
+                                                <option value="">Select...</option>
+                                                <option value="Under $25k">Under $25k</option>
+                                                <option value="$25k-$50k">$25k-$50k</option>
+                                                <option value="$50k-$75k">$50k-$75k</option>
+                                                <option value="$75k-$100k">$75k-$100k</option>
+                                                <option value="$100k-$150k">$100k-$150k</option>
+                                                <option value="$150k+">$150k+</option>
+                                            </select>
+                                        </div>
+                                        <div className="form-group">
+                                            <label>Investment Experience</label>
+                                            <select name="investment_experience" style={{ width: '100%', padding: '12px', border: '2px solid #e0e0e0', borderRadius: '6px' }}>
+                                                <option value="">Select...</option>
+                                                <option value="beginner">Beginner</option>
+                                                <option value="intermediate">Intermediate</option>
+                                                <option value="advanced">Advanced</option>
+                                            </select>
+                                        </div>
+                                        <div className="form-group">
+                                            <label>Risk Tolerance</label>
+                                            <select name="risk_tolerance" style={{ width: '100%', padding: '12px', border: '2px solid #e0e0e0', borderRadius: '6px' }}>
+                                                <option value="">Select...</option>
+                                                <option value="low">Low (Conservative)</option>
+                                                <option value="medium">Medium (Moderate)</option>
+                                                <option value="high">High (Aggressive)</option>
+                                            </select>
+                                        </div>
+                                        <div className="form-group">
+                                            <label>Debt Status</label>
+                                            <select name="debt_status" style={{ width: '100%', padding: '12px', border: '2px solid #e0e0e0', borderRadius: '6px' }}>
+                                                <option value="">Select...</option>
+                                                <option value="none">None</option>
+                                                <option value="some">Some</option>
+                                                <option value="significant">Significant</option>
+                                            </select>
+                                        </div>
+                                        <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                                            <label>Financial Goals (comma-separated)</label>
+                                            <input type="text" name="financial_goals" placeholder="e.g., Buy a home, Retirement, Pay off debt" />
+                                        </div>
+                                        <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                                            <label>Current Investments</label>
+                                            <textarea name="current_investments" placeholder="e.g., 401k, Stocks, Real Estate" style={{ minHeight: '80px' }}></textarea>
+                                        </div>
+                                        <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                                            <label>Other Financial Interests</label>
+                                            <textarea name="interests" placeholder="e.g., Crypto, Day trading, Index funds" style={{ minHeight: '80px' }}></textarea>
+                                        </div>
+                                        <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                                            <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
+                                                <input type="checkbox" name="retirement_planning" value="yes" style={{ width: 'auto', margin: 0 }} />
+                                                I'm interested in retirement planning
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <button type="submit" style={{ marginTop: '20px' }}>Complete Profile</button>
+                                    {onboardingStatus && (
+                                        <div className={`status ${onboardingStatus.includes('✅') ? 'success' : onboardingStatus.includes('⏳') ? 'info' : 'error'}`}>
+                                            {onboardingStatus}
+                                        </div>
+                                    )}
+                                </form>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="grid">
+                            <div className="card full-width">
+                                <h2>💬 Chat with AI</h2>
+                                <form onSubmit={handleChat}>
+                                    <div className="form-group">
+                                        <label>Your Message</label>
+                                        <textarea
+                                            name="message"
+                                            required
+                                            placeholder="Ask me anything about finance, investing, or wealth management..."
+                                        />
+                                    </div>
+                                    <button type="submit">Send Message</button>
+                                    {chatStatus && (
+                                        <div className={`status ${chatStatus.includes('✅') ? 'success' : chatStatus.includes('⏳') ? 'info' : 'error'}`}>
+                                            {chatStatus}
+                                        </div>
+                                    )}
+                                </form>
+
+                                {chatMessages.length > 0 && (
+                                    <div className="chat-messages">
+                                        <h3 style={{ marginBottom: '15px', color: '#667eea' }}>Conversation History</h3>
+                                        {chatMessages.map((msg, idx) => (
+                                            <div key={idx} className={`message ${msg.role}`}>
+                                                <div className="message-role">
+                                                    {msg.role === 'user' ? '👤 You' : '🤖 AI Assistant'}
+                                                </div>
+                                                <div className="message-content">{msg.content}</div>
+                                                {msg.tokens_used && (
+                                                    <div className="token-info">
+                                                        {msg.tokens_used} tokens • {msg.sources_count} sources
+                                                        {msg.cached && ' • ⚡ Cached'}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+</body>
+</html>
