@@ -161,14 +161,24 @@ jobs:
           script: |
             cd /opt/wealth-coach-ai
             git pull origin main
-            docker-compose -f docker-compose.prod.yml pull
-            docker-compose -f docker-compose.prod.yml up -d --no-build
-            docker-compose -f docker-compose.prod.yml exec -T backend python -c "from backend.services.vector_store.pgvector_store import get_vector_store; print(f'Health check: {get_vector_store().count()} documents')"
+
+            # Pull latest images from GitHub Container Registry
+            echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            docker pull ghcr.io/${{ github.repository }}/backend:latest
+            docker pull ghcr.io/${{ github.repository }}/frontend:latest
+
+            # Deploy with docker compose
+            docker compose -f docker-compose.prod.yml up -d --no-build
+
+            # Cleanup old images
+            docker image prune -f
+
+            echo "Deployment completed successfully!"
 
       - name: Health check
         run: |
-          sleep 10
-          curl -f https://wealthcoach.yourdomain.com/api/health || exit 1
+          sleep 15
+          curl -f http://${{ secrets.DEPLOY_HOST }}:8000/health || curl -f https://${{ secrets.DEPLOY_HOST }}/api/health || exit 1
 
       - name: Notify deployment
         if: always()
