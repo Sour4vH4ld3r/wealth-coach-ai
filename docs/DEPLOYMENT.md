@@ -1,577 +1,585 @@
-# Deployment Guide - Wealth Coach AI Assistant
+# 🚀 Wealth Coach AI - Excloud VPS Deployment Guide
 
-## Overview
-
-This guide covers deploying Wealth Coach AI to a single VPS for <$20/month operation supporting 1000+ concurrent users.
+Complete guide for deploying Wealth Coach AI to your Excloud VPS server.
 
 ---
 
-## Infrastructure Requirements
+## 📊 Server Requirements
 
-### Minimum VPS Specifications
-- **RAM**: 4GB
-- **CPU**: 2 vCPU
-- **Storage**: 40GB SSD
-- **Bandwidth**: 2TB/month
+### Minimum Configuration (Testing)
+- **CPU:** 2 vCPU cores
+- **RAM:** 4GB
+- **Storage:** 40GB SSD
+- **OS:** Ubuntu 22.04 LTS
 
-### Recommended VPS Providers
-1. **Hetzner Cloud** - CPX21 (€8.46/month) ⭐ Best value
-2. **DigitalOcean** - Basic Droplet ($24/month)
-3. **Vultr** - High Frequency ($12/month)
-4. **Linode** - Shared CPU ($12/month)
+### Recommended Configuration (Production)
+- **CPU:** 4 vCPU cores
+- **RAM:** 8GB
+- **Storage:** 80GB SSD
+- **OS:** Ubuntu 22.04 LTS
+- **Bandwidth:** 2TB/month
+
+### With Monitoring (Prometheus + Grafana)
+- **CPU:** 6 vCPU cores
+- **RAM:** 12GB
+- **Storage:** 100GB SSD
+- **Bandwidth:** 3TB/month
 
 ---
 
-## Deployment Options
+## 🔧 Initial Server Setup
 
-### Option 1: Docker Compose (Recommended)
+### 1. Order Excloud VPS
 
-**Pros**: Easy setup, isolated services, portable
-**Cons**: Slight overhead vs bare metal
+1. Go to [Excloud](https://www.excloud.in/) or your Excloud provider
+2. Select VPS plan matching requirements above
+3. Choose **Ubuntu 22.04 LTS** as OS
+4. Note your server IP address and root password
 
-**Steps**:
+### 2. First Login
 
-1. **Provision VPS and SSH in**:
 ```bash
+# SSH into your server
 ssh root@your-server-ip
+
+# Change root password (recommended)
+passwd
 ```
 
-2. **Install Docker & Docker Compose**:
+### 3. Run Automated Setup Script
+
 ```bash
-# Update system
-apt update && apt upgrade -y
-
-# Install Docker
-curl -fsSL https://get.docker.com -o get-docker.sh
-sh get-docker.sh
-
-# Install Docker Compose
-apt install docker-compose -y
-
-# Verify installation
-docker --version
-docker-compose --version
+# Download and run setup script
+wget https://raw.githubusercontent.com/Sour4vH4ld3r/wealth-coach-ai/main/deploy/server-setup.sh
+chmod +x server-setup.sh
+bash server-setup.sh
 ```
 
-3. **Clone repository** (or upload files):
+**What this script does:**
+- ✅ Updates system packages
+- ✅ Installs Docker & Docker Compose
+- ✅ Installs Nginx, Certbot (for SSL)
+- ✅ Configures firewall (UFW)
+- ✅ Creates application directory
+- ✅ Sets up 4GB swap space
+- ✅ Creates deployment helper scripts
+
+### 4. Manual Setup (Alternative)
+
+If you prefer manual setup, see the script for commands: `deploy/server-setup.sh`
+
+---
+
+## 📥 Application Deployment
+
+### 1. Clone Repository
+
 ```bash
-git clone https://github.com/yourusername/wealthWarriors.git
-cd wealthWarriors
+# Navigate to application directory
+cd /opt/wealth-coach-ai
+
+# Clone repository
+git clone https://github.com/Sour4vH4ld3r/wealth-coach-ai.git .
+
+# Or if already cloned, pull latest
+git pull origin main
 ```
 
-4. **Configure environment**:
+### 2. Configure Environment Variables
+
 ```bash
-cp .env.example .env
-nano .env  # Edit with your settings
+# Copy environment template
+cp .env.template .env
+
+# Edit environment file
+nano .env
 ```
 
-**Critical .env settings**:
-```env
+**Required environment variables:**
+
+```bash
+# Environment
 ENVIRONMENT=production
 DEBUG=false
-OPENAI_API_KEY=sk-your-key-here
-JWT_SECRET_KEY=<generate-with-openssl-rand-hex-32>
-REDIS_URL=redis://redis:6379/0
-CHROMA_HOST=chromadb
+LOG_LEVEL=WARNING
+
+# Database (Supabase - get from https://supabase.com/)
+DATABASE_URL=postgresql://user:password@db.xxx.supabase.co:5432/postgres
+
+# Redis (Upstash - get from https://upstash.com/)
+REDIS_URL=redis://default:password@region.upstash.io:port
+
+# OpenAI API (get from https://platform.openai.com/api-keys)
+OPENAI_API_KEY=sk-proj-xxxxxxxxxxxxxxxxxxxxxxxxxx
+
+# JWT Secret (generate random string)
+JWT_SECRET_KEY=$(openssl rand -hex 32)
+
+# Frontend API URL
+VITE_API_URL=https://api.yourdomain.com  # or http://your-server-ip:8000
+
+# Grafana Admin Password
+GRAFANA_ADMIN_PASSWORD=$(openssl rand -base64 16)
 ```
 
-5. **Generate JWT secret**:
+### 3. Setup Cloud Services
+
+#### Supabase (PostgreSQL Database)
+
+1. Go to: https://supabase.com/
+2. Create new project
+3. Enable **pgvector** extension:
+   ```sql
+   CREATE EXTENSION IF NOT EXISTS vector;
+   ```
+4. Copy connection string to `DATABASE_URL`
+
+#### Upstash (Redis Cache)
+
+1. Go to: https://upstash.com/
+2. Create new Redis database
+3. Copy connection URL to `REDIS_URL`
+
+### 4. Login to GitHub Container Registry
+
 ```bash
-openssl rand -hex 32
-# Copy output to JWT_SECRET_KEY in .env
+# Generate Personal Access Token at:
+# https://github.com/settings/tokens
+# Scopes needed: read:packages
+
+# Login to registry
+echo YOUR_GITHUB_TOKEN | docker login ghcr.io -u Sour4vH4ld3r --password-stdin
 ```
 
-6. **Start services**:
+### 5. Deploy Application
+
 ```bash
-docker-compose up -d
+# Using helper script
+./deploy.sh
+
+# Or manually
+docker compose -f docker-compose.prod.yml pull
+docker compose -f docker-compose.prod.yml up -d
 ```
 
-7. **Load knowledge base**:
-```bash
-docker-compose exec backend python scripts/load_knowledge.py
-```
+### 6. Verify Deployment
 
-8. **Verify deployment**:
 ```bash
+# Check running containers
+docker compose -f docker-compose.prod.yml ps
+
+# Check logs
+docker compose -f docker-compose.prod.yml logs -f
+
+# Test API health
 curl http://localhost:8000/health
-# Should return: {"status": "healthy"}
+
+# Expected output: {"status":"healthy"}
 ```
 
 ---
 
-### Option 2: Systemd Service (Bare Metal)
+## 🌐 Domain & SSL Setup
 
-**Pros**: Lower overhead, direct control
-**Cons**: More complex setup
+### 1. Point Domain to Server
 
-1. **Install dependencies**:
+Add these DNS records at your domain registrar:
+
+```
+Type    Name    Value               TTL
+A       @       your-server-ip      3600
+A       www     your-server-ip      3600
+CNAME   api     yourdomain.com      3600
+```
+
+### 2. Configure Nginx
+
 ```bash
-apt update && apt install -y python3.11 python3-pip redis-server nginx
+# Create Nginx config
+sudo nano /etc/nginx/sites-available/wealth-coach-ai
 ```
 
-2. **Setup application**:
-```bash
-cd /opt
-git clone <repo-url> wealthcoach
-cd wealthcoach
-python3.11 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-```
-
-3. **Create systemd service**:
-```bash
-nano /etc/systemd/system/wealthcoach.service
-```
-
-```ini
-[Unit]
-Description=Wealth Coach AI API
-After=network.target redis.service
-
-[Service]
-Type=simple
-User=www-data
-WorkingDirectory=/opt/wealthcoach
-Environment="PATH=/opt/wealthcoach/venv/bin"
-ExecStart=/opt/wealthcoach/venv/bin/uvicorn backend.main:app --host 0.0.0.0 --port 8000 --workers 4
-Restart=always
-
-[Install]
-WantedBy=multi-user.target
-```
-
-4. **Enable and start**:
-```bash
-systemctl enable wealthcoach
-systemctl start wealthcoach
-systemctl status wealthcoach
-```
-
----
-
-## Nginx Configuration
-
-### Basic Reverse Proxy
-
-Create `/etc/nginx/sites-available/wealthcoach`:
+**Nginx configuration:**
 
 ```nginx
+# Backend API
 server {
     listen 80;
-    server_name your-domain.com;
+    server_name api.yourdomain.com;
 
-    # Redirect HTTP to HTTPS
-    return 301 https://$server_name$request_uri;
-}
-
-server {
-    listen 443 ssl http2;
-    server_name your-domain.com;
-
-    # SSL Configuration
-    ssl_certificate /etc/letsencrypt/live/your-domain.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/your-domain.com/privkey.pem;
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_ciphers HIGH:!aNULL:!MD5;
-
-    # Rate limiting
-    limit_req_zone $binary_remote_addr zone=api:10m rate=20r/m;
-    limit_req zone=api burst=5 nodelay;
-
-    # Proxy settings
     location / {
         proxy_pass http://localhost:8000;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-
-        # WebSocket support
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-
-        # Timeouts
-        proxy_connect_timeout 60s;
-        proxy_send_timeout 60s;
-        proxy_read_timeout 60s;
     }
+}
 
-    # Health check endpoint (no rate limit)
-    location /health {
-        proxy_pass http://localhost:8000/health;
-        access_log off;
+# Frontend
+server {
+    listen 80;
+    server_name yourdomain.com www.yourdomain.com;
+
+    location / {
+        proxy_pass http://localhost:5173;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
     }
-
-    # Logging
-    access_log /var/log/nginx/wealthcoach_access.log;
-    error_log /var/log/nginx/wealthcoach_error.log;
 }
 ```
 
-Enable site:
 ```bash
-ln -s /etc/nginx/sites-available/wealthcoach /etc/nginx/sites-enabled/
-nginx -t
-systemctl reload nginx
+# Enable site
+sudo ln -s /etc/nginx/sites-available/wealth-coach-ai /etc/nginx/sites-enabled/
+
+# Test configuration
+sudo nginx -t
+
+# Reload Nginx
+sudo systemctl reload nginx
+```
+
+### 3. Setup SSL with Let's Encrypt
+
+```bash
+# Install certificate for both domains
+sudo certbot --nginx -d yourdomain.com -d www.yourdomain.com -d api.yourdomain.com
+
+# Follow prompts:
+# - Enter email
+# - Agree to terms
+# - Choose redirect HTTP to HTTPS (recommended)
+```
+
+**Auto-renewal is configured automatically!**
+
+Test renewal:
+```bash
+sudo certbot renew --dry-run
 ```
 
 ---
 
-## SSL Certificate (Let's Encrypt)
+## 🔄 GitHub Actions Auto-Deployment
+
+### 1. Add GitHub Secrets
+
+Go to: `https://github.com/Sour4vH4ld3r/wealth-coach-ai/settings/secrets/actions`
+
+**Required secrets:**
+
+```
+DEPLOY_HOST = your-excloud-server-ip
+DEPLOY_USER = deploy  # or your username
+DEPLOY_SSH_KEY = <paste SSH private key>
+```
+
+### 2. Generate SSH Key for GitHub Actions
+
+**On your VPS:**
 
 ```bash
-# Install certbot
-apt install certbot python3-certbot-nginx -y
+# Generate SSH key
+ssh-keygen -t ed25519 -C "github-actions" -f ~/.ssh/github_deploy
 
-# Obtain certificate
-certbot --nginx -d your-domain.com
+# Press Enter for no passphrase
 
-# Auto-renewal is configured automatically
-# Test renewal:
-certbot renew --dry-run
+# Add to authorized_keys
+cat ~/.ssh/github_deploy.pub >> ~/.ssh/authorized_keys
+
+# Display private key (copy this for GitHub secret DEPLOY_SSH_KEY)
+cat ~/.ssh/github_deploy
+```
+
+### 3. Test Deployment
+
+```bash
+# Push to main branch
+git push origin main
+
+# GitHub Actions will automatically:
+# 1. Run tests
+# 2. Build Docker images
+# 3. Push to GitHub Container Registry
+# 4. SSH into your VPS
+# 5. Pull latest images
+# 6. Restart services
+```
+
+Monitor at: `https://github.com/Sour4vH4ld3r/wealth-coach-ai/actions`
+
+---
+
+## 📊 Monitoring Setup (Optional)
+
+### Enable Prometheus & Grafana
+
+```bash
+# Edit docker-compose.prod.yml to uncomment monitoring services
+# Or use profile:
+docker compose -f docker-compose.prod.yml --profile monitoring up -d
+```
+
+**Access dashboards:**
+- Prometheus: `http://your-server-ip:9090`
+- Grafana: `http://your-server-ip:3000`
+  - Default login: `admin` / `<GRAFANA_ADMIN_PASSWORD from .env>`
+
+### Setup Grafana Dashboards
+
+1. Login to Grafana
+2. Add Prometheus data source: `http://prometheus:9090`
+3. Import dashboard ID: `1860` (Node Exporter)
+
+---
+
+## 🔐 Security Hardening
+
+### 1. SSH Security
+
+```bash
+# Disable root login
+sudo nano /etc/ssh/sshd_config
+
+# Change these lines:
+PermitRootLogin no
+PasswordAuthentication no
+PubkeyAuthentication yes
+
+# Restart SSH
+sudo systemctl restart sshd
+```
+
+### 2. Fail2Ban (Prevent brute force)
+
+```bash
+# Install
+sudo apt install fail2ban -y
+
+# Configure
+sudo cp /etc/fail2ban/jail.conf /etc/fail2ban/jail.local
+sudo systemctl enable fail2ban
+sudo systemctl start fail2ban
+```
+
+### 3. Automatic Security Updates
+
+```bash
+sudo apt install unattended-upgrades -y
+sudo dpkg-reconfigure -plow unattended-upgrades
 ```
 
 ---
 
-## Monitoring & Logging
+## 🛠️ Maintenance Commands
 
-### 1. View Application Logs
+### View Logs
 
-**Docker**:
 ```bash
-docker-compose logs -f backend
-docker-compose logs -f redis
-docker-compose logs -f chromadb
+# All services
+docker compose -f docker-compose.prod.yml logs -f
+
+# Specific service
+docker compose -f docker-compose.prod.yml logs -f backend
+
+# Last 100 lines
+docker compose -f docker-compose.prod.yml logs --tail=100 backend
 ```
 
-**Systemd**:
+### Restart Services
+
 ```bash
-journalctl -u wealthcoach -f
+# Restart all
+docker compose -f docker-compose.prod.yml restart
+
+# Restart specific service
+docker compose -f docker-compose.prod.yml restart backend
 ```
 
-### 2. Monitor Resources
+### Update Application
 
 ```bash
-# CPU and memory
+# Pull latest code
+cd /opt/wealth-coach-ai
+git pull origin main
+
+# Rebuild and restart
+docker compose -f docker-compose.prod.yml up -d --build
+```
+
+### Database Backup
+
+```bash
+# Backup Supabase database
+pg_dump -h db.xxx.supabase.co -U postgres -d postgres > backup.sql
+
+# Restore
+psql -h db.xxx.supabase.co -U postgres -d postgres < backup.sql
+```
+
+### Clean Up Docker
+
+```bash
+# Remove unused images
+docker image prune -a -f
+
+# Remove unused volumes
+docker volume prune -f
+
+# Full cleanup
+docker system prune -a --volumes -f
+```
+
+### Monitor Resources
+
+```bash
+# System resources
 htop
 
 # Disk usage
 df -h
+ncdu /
 
 # Docker stats
 docker stats
-```
 
-### 3. Setup Log Rotation
-
-Create `/etc/logrotate.d/wealthcoach`:
-```
-/opt/wealthcoach/logs/*.log {
-    daily
-    rotate 30
-    compress
-    delaycompress
-    notifempty
-    create 0644 www-data www-data
-    sharedscripts
-    postrotate
-        systemctl reload wealthcoach
-    endscript
-}
+# Service status
+docker compose -f docker-compose.prod.yml ps
 ```
 
 ---
 
-## Cost Optimization
+## 🚨 Troubleshooting
 
-### 1. Redis Memory Management
-
-In `docker-compose.yml`, Redis is configured with:
-```yaml
-command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
-```
-
-This limits Redis to 256MB and auto-evicts old cache entries.
-
-### 2. LLM Token Limits
-
-In `.env`:
-```env
-MAX_TOKENS_PER_REQUEST=500
-MAX_REQUESTS_PER_USER_PER_DAY=100
-```
-
-Limits prevent runaway costs from abuse or bugs.
-
-### 3. Cache Hit Rate Monitoring
-
-Check cache effectiveness:
-```bash
-curl http://localhost:8000/api/v1/metrics
-```
-
-Target: >80% cache hit rate
-
-### 4. ChromaDB Optimization
-
-- Use embedded mode (no separate server)
-- Batch document insertions
-- Periodic cleanup of old embeddings
-
----
-
-## Backup Strategy
-
-### Automated Backups
-
-Create `/opt/backup-wealthcoach.sh`:
-```bash
-#!/bin/bash
-DATE=$(date +%Y%m%d_%H%M%S)
-BACKUP_DIR="/opt/backups"
-
-mkdir -p $BACKUP_DIR
-
-# Backup vector database
-tar -czf $BACKUP_DIR/chroma_$DATE.tar.gz /opt/wealthcoach/data/vector_store
-
-# Backup Redis (if using persistence)
-docker-compose exec -T redis redis-cli BGSAVE
-cp /var/lib/docker/volumes/wealthwarriors_redis_data/_data/dump.rdb \
-   $BACKUP_DIR/redis_$DATE.rdb
-
-# Backup environment config
-cp /opt/wealthcoach/.env $BACKUP_DIR/env_$DATE
-
-# Keep only last 7 days
-find $BACKUP_DIR -name "*.tar.gz" -mtime +7 -delete
-find $BACKUP_DIR -name "*.rdb" -mtime +7 -delete
-
-echo "Backup completed: $DATE"
-```
-
-Add to crontab:
-```bash
-crontab -e
-# Add: 0 2 * * * /opt/backup-wealthcoach.sh
-```
-
----
-
-## Security Hardening
-
-### 1. Firewall (UFW)
-
-```bash
-ufw default deny incoming
-ufw default allow outgoing
-ufw allow ssh
-ufw allow http
-ufw allow https
-ufw enable
-```
-
-### 2. Fail2Ban for SSH
-
-```bash
-apt install fail2ban -y
-systemctl enable fail2ban
-```
-
-### 3. Environment Security
-
-```bash
-# Restrict .env permissions
-chmod 600 .env
-
-# Disable root login
-sed -i 's/PermitRootLogin yes/PermitRootLogin no/' /etc/ssh/sshd_config
-systemctl restart ssh
-```
-
-### 4. Security Headers (Nginx)
-
-Add to nginx config:
-```nginx
-add_header X-Frame-Options "SAMEORIGIN" always;
-add_header X-Content-Type-Options "nosniff" always;
-add_header X-XSS-Protection "1; mode=block" always;
-add_header Referrer-Policy "no-referrer-when-downgrade" always;
-```
-
----
-
-## Scaling Strategies
-
-### Vertical Scaling (Single Server)
-1. Upgrade to 8GB RAM VPS (~$16/month)
-2. Increase worker count: `--workers 8`
-3. Allocate more Redis memory: `512mb`
-
-### Horizontal Scaling (Multiple Servers)
-1. Load balancer (Nginx/HAProxy)
-2. Separate Redis server
-3. Shared ChromaDB (NFS mount or S3)
-4. Database for conversations (PostgreSQL)
-
----
-
-## Troubleshooting
-
-### Service Won't Start
+### Application Won't Start
 
 ```bash
 # Check logs
-docker-compose logs backend
+docker compose -f docker-compose.prod.yml logs
 
-# Check disk space
-df -h
+# Check .env file
+cat .env
 
+# Verify environment variables
+docker compose -f docker-compose.prod.yml config
+```
+
+### Database Connection Issues
+
+```bash
+# Test database connection
+docker compose -f docker-compose.prod.yml exec backend python -c "
+from backend.database import get_db
+print('Database connected:', next(get_db()))
+"
+```
+
+### SSL Certificate Issues
+
+```bash
+# Check certificate status
+sudo certbot certificates
+
+# Renew manually
+sudo certbot renew
+
+# Check Nginx config
+sudo nginx -t
+```
+
+### Port Already in Use
+
+```bash
+# Check what's using port 8000
+sudo lsof -i :8000
+
+# Kill process
+sudo kill -9 <PID>
+```
+
+### Out of Memory
+
+```bash
 # Check memory
 free -h
 
-# Restart services
-docker-compose restart
-```
-
-### High Memory Usage
-
-```bash
-# Check Docker stats
-docker stats
-
-# Reduce worker count
-# Edit docker-compose.yml: --workers 2
-
-# Clear Redis cache
-docker-compose exec redis redis-cli FLUSHALL
-```
-
-### Slow Responses
-
-1. Check cache hit rate in `/api/v1/metrics`
-2. Monitor LLM API response times
-3. Verify Redis is running
-4. Check network latency to OpenAI
-
-### ChromaDB Issues
-
-```bash
-# Rebuild vector database
-docker-compose exec backend python scripts/load_knowledge.py --reset
-
-# Check collection count
-curl http://localhost:8001/api/v1/collections
+# Increase swap
+sudo fallocate -l 8G /swapfile2
+sudo chmod 600 /swapfile2
+sudo mkswap /swapfile2
+sudo swapon /swapfile2
 ```
 
 ---
 
-## Health Monitoring
+## 📈 Performance Optimization
 
-### Uptime Monitoring Services (Free Tier)
-- **UptimeRobot**: 50 monitors, 5-min checks
-- **Healthchecks.io**: Cron job monitoring
-- **StatusCake**: Uptime and performance
+### Enable Redis Caching
 
-### Custom Health Check Script
+Already configured in production. Verify:
 
 ```bash
-#!/bin/bash
-HEALTH_URL="http://localhost:8000/api/v1/health/detailed"
-RESPONSE=$(curl -s $HEALTH_URL)
+# Test Redis connection
+docker compose -f docker-compose.prod.yml exec backend python -c "
+import redis
+r = redis.from_url('redis://redis:6379/0')
+print('Redis ping:', r.ping())
+"
+```
 
-if echo "$RESPONSE" | grep -q "healthy"; then
-    echo "✓ Service healthy"
-    exit 0
-else
-    echo "✗ Service unhealthy"
-    echo "$RESPONSE"
-    # Send alert (email, Slack, etc.)
-    exit 1
-fi
+### Database Connection Pooling
+
+Already configured in production settings.
+
+### Enable Gzip Compression
+
+Add to Nginx config:
+
+```nginx
+gzip on;
+gzip_vary on;
+gzip_types text/plain text/css application/json application/javascript;
+gzip_min_length 1000;
 ```
 
 ---
 
-## Maintenance Checklist
+## 🎯 Production Checklist
 
-### Daily
-- [ ] Check error logs for issues
-- [ ] Monitor cost in OpenAI dashboard
-- [ ] Verify all services running
-
-### Weekly
-- [ ] Review cache hit rate metrics
-- [ ] Check disk space usage
-- [ ] Review rate limit violations
-
-### Monthly
-- [ ] Update dependencies (security patches)
-- [ ] Review and optimize costs
-- [ ] Test backup restoration
-- [ ] Renew SSL cert (auto with Let's Encrypt)
-
----
-
-## Emergency Procedures
-
-### Service Crash
-```bash
-docker-compose restart backend
-```
-
-### Out of Disk Space
-```bash
-docker system prune -a --volumes
-```
-
-### High API Costs
-```bash
-# Temporarily disable service
-docker-compose stop backend
-
-# Investigate in logs
-docker-compose logs backend | grep "tokens_used"
-```
-
-### Data Loss
-```bash
-# Restore from backup
-tar -xzf /opt/backups/chroma_YYYYMMDD.tar.gz -C /
-docker-compose restart
-```
+- [ ] Server meets minimum requirements
+- [ ] Domain pointing to server IP
+- [ ] SSL certificate installed
+- [ ] Environment variables configured
+- [ ] Database (Supabase) setup
+- [ ] Redis (Upstash) setup
+- [ ] GitHub Actions secrets added
+- [ ] Firewall configured
+- [ ] Nginx configured
+- [ ] Application running
+- [ ] Health check passing
+- [ ] Logs accessible
+- [ ] Backups configured
+- [ ] Monitoring setup (optional)
 
 ---
 
-## Production Deployment Checklist
+## 📞 Support
 
-- [ ] VPS provisioned and configured
-- [ ] Docker and Docker Compose installed
-- [ ] Repository cloned/uploaded
-- [ ] .env configured with production values
-- [ ] JWT secret generated and set
-- [ ] OpenAI API key configured
-- [ ] Services started with docker-compose
-- [ ] Knowledge base loaded
-- [ ] Nginx installed and configured
-- [ ] SSL certificate obtained
-- [ ] Firewall (UFW) enabled
-- [ ] Fail2Ban configured
-- [ ] Automated backups scheduled
-- [ ] Monitoring configured
-- [ ] Health checks passing
-- [ ] API tested end-to-end
-- [ ] Documentation reviewed
+- **GitHub Issues:** https://github.com/Sour4vH4ld3r/wealth-coach-ai/issues
+- **Documentation:** Check project README.md
 
 ---
 
-## Support & Resources
+## 📚 Additional Resources
 
-- **Logs**: `docker-compose logs -f`
-- **Metrics**: `http://your-domain.com/api/v1/metrics`
-- **Health**: `http://your-domain.com/api/v1/health/detailed`
-- **API Docs**: `http://your-domain.com/docs`
+- [Excloud Documentation](https://www.excloud.in/docs)
+- [Docker Documentation](https://docs.docker.com/)
+- [Nginx Documentation](https://nginx.org/en/docs/)
+- [Let's Encrypt](https://letsencrypt.org/)
+- [Supabase Docs](https://supabase.com/docs)
+- [Upstash Docs](https://upstash.com/docs)
 
-For issues, check logs first, then consult troubleshooting section above.
+---
+
+**🎉 Congratulations! Your Wealth Coach AI is now running on Excloud VPS!**
