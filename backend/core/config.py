@@ -230,6 +230,7 @@ class Settings(BaseSettings):
     def validate_jwt_secret(cls, v, info):
         """Warn if using default JWT secret in production."""
         import secrets
+        import logging
 
         if v == "INSECURE-DEV-KEY-CHANGE-IN-PRODUCTION":
             if info.data.get("ENVIRONMENT") == "production":
@@ -239,7 +240,7 @@ class Settings(BaseSettings):
             else:
                 # Generate secure key for development
                 generated_key = secrets.token_urlsafe(32)
-                logger.warning(f"⚠️  Using auto-generated JWT secret for development. Set JWT_SECRET_KEY in .env for production.")
+                logging.getLogger(__name__).warning(f"⚠️  Using auto-generated JWT secret for development. Set JWT_SECRET_KEY in .env for production.")
                 return generated_key
         return v
 
@@ -247,11 +248,13 @@ class Settings(BaseSettings):
     @classmethod
     def validate_api_keys(cls, v, info):
         """Validate API keys configuration."""
+        import logging
+
         if info.data.get("ENVIRONMENT") == "production" and not v:
-            logger.warning("⚠️  No API keys configured. API key authentication disabled in production.")
+            logging.getLogger(__name__).warning("⚠️  No API keys configured. API key authentication disabled in production.")
 
         if any(key.startswith("dev-") for key in v):
-            logger.warning("⚠️  Development API keys detected - do not use in production!")
+            logging.getLogger(__name__).warning("⚠️  Development API keys detected - do not use in production!")
 
         return v
 
