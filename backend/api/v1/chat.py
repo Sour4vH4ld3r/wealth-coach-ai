@@ -232,12 +232,15 @@ async def send_message(
         conversation_id=session.id,
     )
 
-    # Cache response
+    # Cache response (convert datetime to ISO string for JSON serialization)
     if settings.CACHE_ENABLED:
         try:
+            cache_data = chat_response.dict()
+            if 'timestamp' in cache_data and isinstance(cache_data['timestamp'], datetime):
+                cache_data['timestamp'] = cache_data['timestamp'].isoformat()
             await redis.set(
                 cache_key,
-                json.dumps(chat_response.dict()),
+                json.dumps(cache_data),
                 ex=settings.QUERY_CACHE_TTL,
             )
         except Exception as e:
@@ -441,30 +444,55 @@ async def get_chat_sessions(
 
     Returns list of sessions with their latest message preview.
     Frontend can load messages for specific session separately.
+
+    Performance optimized: Uses SQL aggregation to avoid N+1 queries.
     """
-    sessions = db.query(ChatSession).filter(
+    from sqlalchemy import func, case
+    from sqlalchemy.orm import aliased
+
+    # Subquery for first user message (preview)
+    FirstMessage = aliased(ChatMessage)
+    first_msg_subq = db.query(
+        FirstMessage.session_id,
+        func.min(FirstMessage.created_at).label('min_created')
+    ).filter(
+        FirstMessage.role == "user"
+    ).group_by(FirstMessage.session_id).subquery()
+
+    # Subquery for message count
+    msg_count_subq = db.query(
+        ChatMessage.session_id,
+        func.count(ChatMessage.id).label('message_count')
+    ).group_by(ChatMessage.session_id).subquery()
+
+    # Main query with left joins
+    query = db.query(
+        ChatSession,
+        ChatMessage.content.label('preview_content'),
+        msg_count_subq.c.message_count
+    ).outerjoin(
+        first_msg_subq,
+        ChatSession.id == first_msg_subq.c.session_id
+    ).outerjoin(
+        ChatMessage,
+        (ChatSession.id == ChatMessage.session_id) &
+        (ChatMessage.created_at == first_msg_subq.c.min_created) &
+        (ChatMessage.role == "user")
+    ).outerjoin(
+        msg_count_subq,
+        ChatSession.id == msg_count_subq.c.session_id
+    ).filter(
         ChatSession.user_id == user_id
     ).order_by(
         ChatSession.updated_at.desc()
-    ).offset(skip).limit(limit).all()
+    ).offset(skip).limit(limit)
 
     result = []
-    for session in sessions:
-        # Get the first message as preview
-        first_message = db.query(ChatMessage).filter(
-            ChatMessage.session_id == session.id,
-            ChatMessage.role == "user"
-        ).first()
-
-        # Get message count
-        message_count = db.query(ChatMessage).filter(
-            ChatMessage.session_id == session.id
-        ).count()
-
+    for session, preview_content, message_count in query:
         result.append({
             "session_id": session.id,
-            "preview": first_message.content[:100] if first_message else "New conversation",
-            "message_count": message_count,
+            "preview": preview_content[:100] if preview_content else "New conversation",
+            "message_count": message_count or 0,
             "created_at": session.created_at.isoformat(),
             "updated_at": session.updated_at.isoformat(),
         })

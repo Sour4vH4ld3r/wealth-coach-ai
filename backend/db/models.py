@@ -46,8 +46,8 @@ class ChatSession(Base):
     id = Column(String(36), primary_key=True, default=generate_uuid)
     user_id = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
     title = Column(String(255), nullable=True)  # Optional session title
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False, index=True)
 
     # Relationships
     user = relationship("User", back_populates="chat_sessions")
@@ -64,13 +64,13 @@ class ChatMessage(Base):
 
     id = Column(String(36), primary_key=True, default=generate_uuid)
     session_id = Column(String(36), ForeignKey("chat_sessions.id"), nullable=False, index=True)
-    role = Column(String(20), nullable=False)  # 'user' or 'assistant'
+    role = Column(String(20), nullable=False, index=True)  # 'user' or 'assistant'
     content = Column(Text, nullable=False)
     tokens_used = Column(Integer, nullable=True)  # Track token usage
     cost = Column(String(20), nullable=True)  # Track cost
     sources_count = Column(Integer, default=0)  # Number of RAG sources used
     cached = Column(Boolean, default=False)  # Whether response was cached
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
 
     # Relationships
     session = relationship("ChatSession", back_populates="messages")
