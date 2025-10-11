@@ -99,12 +99,12 @@ temp/
 api_keys.txt
 credentials.json
 
-# Test files (don't commit to production)
-test_*.py
-*_test.py
-comprehensive_check.py
-test_vectordb_fixed.py
-simple_test.py
+# Test files (don't commit to production - root level only)
+/test_*.py
+/*_test.py
+/comprehensive_check.py
+/test_vectordb_fixed.py
+/simple_test.py
 
 # SSL certificates (production)
 config/nginx/ssl/*.pem
