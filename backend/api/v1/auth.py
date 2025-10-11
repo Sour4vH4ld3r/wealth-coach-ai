@@ -19,6 +19,11 @@ from backend.core.security import (
 from backend.core.config import settings
 from backend.db.database import get_db
 from backend.db.models import User
+from backend.services.cache.redis_client import RedisClient
+from backend.core.dependencies import get_redis_client
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -124,7 +129,11 @@ async def register(user_data: UserRegistration, db: Session = Depends(get_db)):
 
 
 @router.post("/login", response_model=TokenResponse)
-async def login(credentials: UserLogin, db: Session = Depends(get_db)):
+async def login(
+    credentials: UserLogin,
+    db: Session = Depends(get_db),
+    redis: RedisClient = Depends(get_redis_client)
+):
     """
     Authenticate user and return tokens.
 
@@ -133,17 +142,41 @@ async def login(credentials: UserLogin, db: Session = Depends(get_db)):
     Args:
         credentials: User login credentials
         db: Database session
+        redis: Redis client for rate limiting
 
     Returns:
         Access and refresh tokens
 
     Raises:
-        HTTPException: If credentials are invalid
+        HTTPException: If credentials are invalid or account is locked
     """
+    # Check for account lockout
+    lockout_key = f"login_attempts:{credentials.email}"
+
+    try:
+        attempts_str = await redis.get(lockout_key)
+        attempts = int(attempts_str) if attempts_str else 0
+
+        if attempts >= 5:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Account temporarily locked due to too many failed login attempts. Try again in 15 minutes.",
+            )
+    except Exception as e:
+        # Continue if Redis is unavailable
+        logger.warning(f"Redis unavailable for lockout check: {e}")
+
     # Fetch user from database by email
     user = db.query(User).filter(User.email == credentials.email).first()
 
     if not user:
+        # Increment failed attempts
+        try:
+            await redis.incr(lockout_key)
+            await redis.expire(lockout_key, 900)  # 15 minute lockout
+        except Exception:
+            pass
+
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",
@@ -151,6 +184,13 @@ async def login(credentials: UserLogin, db: Session = Depends(get_db)):
 
     # Verify password
     if not verify_password(credentials.password, user.hashed_password):
+        # Increment failed attempts
+        try:
+            await redis.incr(lockout_key)
+            await redis.expire(lockout_key, 900)  # 15 minute lockout
+        except Exception:
+            pass
+
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",
@@ -162,6 +202,12 @@ async def login(credentials: UserLogin, db: Session = Depends(get_db)):
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Account has been deactivated",
         )
+
+    # Successful login - clear failed attempts
+    try:
+        await redis.delete(lockout_key)
+    except Exception:
+        pass
 
     # Generate tokens
     token_data = {"user_id": user.id, "email": user.email}

@@ -9,6 +9,9 @@ from typing import List, Optional
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):
@@ -113,12 +116,12 @@ class Settings(BaseSettings):
     CORS_ALLOW_CREDENTIALS: bool = True
 
     API_KEY_HEADER: str = "X-API-Key"
-    VALID_API_KEYS: List[str] = Field(default=["dev-key-12345"])
+    VALID_API_KEYS: List[str] = Field(default_factory=list)
 
     # =========================================================================
     # RATE LIMITING
     # =========================================================================
-    RATE_LIMIT_ENABLED: bool = False  # Temporarily disabled for CORS testing
+    RATE_LIMIT_ENABLED: bool = True  # Enabled for security
     RATE_LIMIT_PER_MINUTE: int = 20
     RATE_LIMIT_PER_HOUR: int = 200
     RATE_LIMIT_PER_DAY: int = 1000
@@ -226,10 +229,30 @@ class Settings(BaseSettings):
     @classmethod
     def validate_jwt_secret(cls, v, info):
         """Warn if using default JWT secret in production."""
-        if info.data.get("ENVIRONMENT") == "production" and v == "INSECURE-DEV-KEY-CHANGE-IN-PRODUCTION":
-            raise ValueError(
-                "JWT_SECRET_KEY must be changed from default value in production!"
-            )
+        import secrets
+
+        if v == "INSECURE-DEV-KEY-CHANGE-IN-PRODUCTION":
+            if info.data.get("ENVIRONMENT") == "production":
+                raise ValueError(
+                    "JWT_SECRET_KEY must be changed from default value in production!"
+                )
+            else:
+                # Generate secure key for development
+                generated_key = secrets.token_urlsafe(32)
+                logger.warning(f"⚠️  Using auto-generated JWT secret for development. Set JWT_SECRET_KEY in .env for production.")
+                return generated_key
+        return v
+
+    @field_validator("VALID_API_KEYS")
+    @classmethod
+    def validate_api_keys(cls, v, info):
+        """Validate API keys configuration."""
+        if info.data.get("ENVIRONMENT") == "production" and not v:
+            logger.warning("⚠️  No API keys configured. API key authentication disabled in production.")
+
+        if any(key.startswith("dev-") for key in v):
+            logger.warning("⚠️  Development API keys detected - do not use in production!")
+
         return v
 
     @field_validator("OPENAI_API_KEY")

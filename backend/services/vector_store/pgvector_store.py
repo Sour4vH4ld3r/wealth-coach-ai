@@ -157,6 +157,8 @@ class PGVectorStore:
         db = SessionLocal()
         try:
             # Use JSONB containment operator
+            import json
+
             result = db.execute(
                 text("""
                     SELECT id, content, metadata, created_at
@@ -166,7 +168,7 @@ class PGVectorStore:
                     LIMIT :limit
                 """),
                 {
-                    "filter": str(metadata_filter).replace("'", '"'),
+                    "filter": json.dumps(metadata_filter),
                     "limit": limit
                 }
             )
