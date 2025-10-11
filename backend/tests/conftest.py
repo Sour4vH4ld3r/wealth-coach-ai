@@ -12,71 +12,77 @@ This file provides common test fixtures including:
 import pytest
 import pytest_asyncio
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from fastapi import FastAPI
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.pool import StaticPool
 from typing import Generator, AsyncGenerator
 from unittest.mock import AsyncMock, MagicMock
 import asyncio
 
-from backend.main import app
+# Import the main app's routes and middleware, but NOT the app with lifespan
+from backend.api.v1 import auth, chat, user, health, onboarding
+from backend.middleware.logging import LoggingMiddleware
+# NOTE: We intentionally DON'T import RateLimiterMiddleware for tests
 from backend.db.models import Base, User, UserProfile, ChatSession, ChatMessage, UserPreferences
 from backend.db.database import get_db
 from backend.core.security import hash_password, create_access_token
 from backend.core.dependencies import get_redis_client, get_llm_client, get_rag_retriever
+from backend.core.config import settings
 
 
 # =============================================================================
 # TEST DATABASE SETUP
 # =============================================================================
 
-# Use in-memory SQLite for tests (fast and isolated)
+# Use in-memory SQLite for tests with StaticPool to share connection
 TEST_DATABASE_URL = "sqlite:///:memory:"
 
-# Create test engine
+# Create test engine with StaticPool to ensure single connection
 test_engine = create_engine(
     TEST_DATABASE_URL,
     connect_args={"check_same_thread": False},
+    poolclass=StaticPool,  # Keeps single connection for in-memory DB
     echo=False,
 )
 
 # Create test session factory
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
 
+# Create tables once at module level (exclude Document table for SQLite compatibility)
+from backend.db.models import Document
+tables_to_create = [table for table in Base.metadata.sorted_tables
+                   if table.name != 'documents']
+
+for table in tables_to_create:
+    table.create(bind=test_engine, checkfirst=True)
+
 
 @pytest.fixture(scope="function")
 def db() -> Generator[Session, None, None]:
     """
-    Create a fresh database for each test.
-
+    Create a database session for the test.
+    
     This fixture:
-    1. Creates all tables before the test (excluding Document table for SQLite compatibility)
-    2. Yields a database session
-    3. Drops all tables after the test
-
-    This ensures complete isolation between tests.
-
-    Note: Document table uses PostgreSQL-specific types (JSONB, Vector) that are not
-    compatible with SQLite, so we exclude it from test database.
+    1. Creates a new session
+    2. Yields it to the test  
+    3. Clears all data after test
+    4. Closes session
+    
+    Note: Tables persist across tests (created once at module level).
+    Data is cleared between tests for isolation.
     """
-    # Create only the tables we need for testing (exclude Document table)
-    # Document table uses JSONB and Vector types which are PostgreSQL-specific
-    from backend.db.models import Document
-    tables_to_create = [table for table in Base.metadata.sorted_tables
-                       if table.name != 'documents']
-
-    for table in tables_to_create:
-        table.create(bind=test_engine, checkfirst=True)
-
-    # Create a new session
     session = TestingSessionLocal()
-
+    
     try:
         yield session
     finally:
-        session.close()
-        # Drop all tables after test
+        # Clear all data from tables (but keep table structure)
+        session.rollback()
         for table in reversed(tables_to_create):
-            table.drop(bind=test_engine, checkfirst=True)
+            session.execute(table.delete())
+        session.commit()
+        session.close()
 
 
 def override_get_db():
@@ -85,11 +91,12 @@ def override_get_db():
     try:
         yield session
     finally:
+        session.rollback()
         session.close()
 
 
 # =============================================================================
-# MOCK REDIS CLIENT
+# MOCK REDIS CLIENT  
 # =============================================================================
 
 class MockRedis:
@@ -114,6 +121,8 @@ class MockRedis:
         """Delete key from mock Redis."""
         if key in self.data:
             del self.data[key]
+            if key in self.expirations:
+                del self.expirations[key]
             return 1
         return 0
 
@@ -134,18 +143,39 @@ class MockRedis:
 
     async def close(self):
         """Close mock Redis connection."""
-        pass
+        pass  # Don't clear data here - let fixture handle it
+
+    def clear(self):
+        """Clear all data (called by fixture)."""
+        self.data.clear()
+        self.expirations.clear()
 
 
-@pytest.fixture
+# Global mock Redis instance (reused across dependency calls within a test)
+_mock_redis_instance = None
+
+
+@pytest.fixture(autouse=True)
 def mock_redis():
-    """Provide a mock Redis client for testing."""
-    return MockRedis()
+    """
+    Provide a mock Redis client for testing.
+    
+    Uses autouse to ensure it's created for every test and cleaned up after.
+    """
+    global _mock_redis_instance
+    _mock_redis_instance = MockRedis()
+    yield _mock_redis_instance
+    # Clear data after test
+    _mock_redis_instance.clear()
+    _mock_redis_instance = None
 
 
 async def override_get_redis_client():
-    """Override Redis dependency for testing."""
-    return MockRedis()
+    """Override Redis dependency for testing - returns the global mock instance."""
+    global _mock_redis_instance
+    if _mock_redis_instance is None:
+        _mock_redis_instance = MockRedis()
+    return _mock_redis_instance
 
 
 # =============================================================================
@@ -228,6 +258,40 @@ async def override_get_rag_retriever():
 
 
 # =============================================================================
+# TEST APP (without lifespan and rate limiting)
+# =============================================================================
+
+def create_test_app() -> FastAPI:
+    """
+    Create a FastAPI app for testing WITHOUT the lifespan manager or rate limiting.
+    
+    This prevents startup events from running during tests, which would
+    try to connect to real services (Redis, Vector DB, etc.).
+    
+    Rate limiting is also disabled to prevent test interference.
+    """
+    app = FastAPI(
+        title=settings.APP_NAME + " (Test)",
+        description="Test instance of the API",
+        version=settings.APP_VERSION,
+        # NO lifespan parameter - this prevents startup/shutdown events
+    )
+    
+    # Add middleware (NO RateLimiterMiddleware for tests)
+    app.add_middleware(LoggingMiddleware)
+    # Rate limiting disabled for tests to prevent interference
+    
+    # Add routers
+    app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])
+    app.include_router(chat.router, prefix="/api/v1/chat", tags=["Chat"])
+    app.include_router(user.router, prefix="/api/v1/users", tags=["Users"])
+    app.include_router(health.router, prefix="/api/v1", tags=["Health"])
+    app.include_router(onboarding.router, prefix="/api/v1/onboarding", tags=["Onboarding"])
+    
+    return app
+
+
+# =============================================================================
 # TEST CLIENT
 # =============================================================================
 
@@ -242,14 +306,23 @@ def client(db: Session, mock_redis, mock_llm_client, mock_rag_retriever) -> Test
     - Mock LLM client
     - Mock RAG retriever
     """
-    # Override dependencies
-    app.dependency_overrides[get_db] = override_get_db
+    # Create test app without lifespan or rate limiting
+    app = create_test_app()
+    
+    # Override dependencies to use the same db session
+    def override_get_db_with_fixture():
+        try:
+            yield db
+        finally:
+            pass
+
+    app.dependency_overrides[get_db] = override_get_db_with_fixture
     app.dependency_overrides[get_redis_client] = override_get_redis_client
     app.dependency_overrides[get_llm_client] = override_get_llm_client
     app.dependency_overrides[get_rag_retriever] = override_get_rag_retriever
 
     # Create test client
-    with TestClient(app) as test_client:
+    with TestClient(app, raise_server_exceptions=True) as test_client:
         yield test_client
 
     # Clear overrides after test
@@ -315,6 +388,9 @@ async def async_client(db: Session, mock_redis, mock_llm_client, mock_rag_retrie
     Note: FastAPI TestClient is actually synchronous, but this fixture
     is provided for consistency with async test patterns.
     """
+    # Create test app without lifespan or rate limiting
+    app = create_test_app()
+    
     # Override dependencies
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_redis_client] = override_get_redis_client
