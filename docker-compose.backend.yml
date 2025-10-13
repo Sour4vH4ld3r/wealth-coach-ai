@@ -1,3 +1,7 @@
+<<<<<<< Updated upstream
+=======
+
+>>>>>>> Stashed changes
 
 # =============================================================================
 # BACKEND-ONLY DOCKER COMPOSE CONFIGURATION
@@ -77,4 +81,8 @@ volumes:
   logs:
     driver: local
   huggingface_cache:
+<<<<<<< Updated upstream
     driver: local
+=======
+    driver: local
+>>>>>>> Stashed changes
