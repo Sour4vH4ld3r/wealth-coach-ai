@@ -12,6 +12,7 @@ import {
   Loader2,
   ChevronDown,
 } from 'lucide-react';
+import { API_BASE_URL } from '@/config/api';
 
 const ChatPage = () => {
   const [messages, setMessages] = useState([]);
@@ -54,7 +55,7 @@ const ChatPage = () => {
       const token = localStorage.getItem('token');
 
       // Get the most recent session
-      const sessionsResponse = await fetch('/api/v1/chat/sessions?limit=1', {
+      const sessionsResponse = await fetch(`${API_BASE_URL}/api/v1/chat/sessions?limit=1`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -79,7 +80,7 @@ const ChatPage = () => {
     try {
       const token = localStorage.getItem('token');
       const response = await fetch(
-        `/api/v1/chat/sessions/${sid}/messages?skip=${skipCount}&limit=10`,
+        `${API_BASE_URL}/api/v1/chat/sessions/${sid}/messages?skip=${skipCount}&limit=10`,
         {
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -177,7 +178,7 @@ const ChatPage = () => {
 
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('/api/v1/chat/message/stream', {
+      const response = await fetch(`${API_BASE_URL}/api/v1/chat/message/stream`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

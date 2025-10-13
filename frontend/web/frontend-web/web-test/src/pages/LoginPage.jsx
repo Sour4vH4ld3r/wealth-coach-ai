@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Lock, Mail, TrendingUp } from 'lucide-react';
+import { API_BASE_URL } from '@/config/api';
 
 const LoginPage = () => {
   const [email, setEmail] = useState('');
@@ -19,7 +20,7 @@ const LoginPage = () => {
     setLoading(true);
 
     try {
-      const response = await fetch('/api/v1/auth/login', {
+      const response = await fetch(`${API_BASE_URL}/api/v1/auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -41,7 +42,7 @@ const LoginPage = () => {
 
       // Check onboarding status from backend
       try {
-        const onboardingResponse = await fetch('/api/v1/onboarding/status', {
+        const onboardingResponse = await fetch(`${API_BASE_URL}/api/v1/onboarding/status`, {
           headers: {
             'Authorization': `Bearer ${data.access_token}`,
           },

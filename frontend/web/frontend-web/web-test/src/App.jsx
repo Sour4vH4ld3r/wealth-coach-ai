@@ -4,6 +4,7 @@ import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import OnboardingPage from './pages/OnboardingPage';
 import ChatPage from './pages/ChatPage';
+import { API_BASE_URL } from './config/api';
 
 const ProtectedRoute = ({ children }) => {
   const token = localStorage.getItem('token');
@@ -26,7 +27,7 @@ const ChatRoute = ({ children }) => {
       }
 
       try {
-        const response = await fetch('/api/v1/onboarding/status', {
+        const response = await fetch(`${API_BASE_URL}/api/v1/onboarding/status`, {
           headers: {
             'Authorization': `Bearer ${token}`,
           },
