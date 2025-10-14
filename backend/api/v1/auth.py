@@ -336,13 +336,13 @@ async def send_otp(
         sms_url = "http://sms.bulksmsind.in/v2/sendSMS"
         sms_params = {
             "username": "myfighters",
-            "message": f"{otp} is your Wealthwarriors login verification code .SUBVRF",
+            "message": f"{otp} is your WealthwarriorsHub verification code .SUBVRF",
             "sendername": "SUBVRF",
             "smstype": "TRANS",
             "numbers": request.mobile_number,
-            "apikey": "4ea8c19a--4b9a-b559-bbecbe99d0b4",
-            "peid": "15014642566",
-            "templateid": "150716551"
+            "apikey": "4ea8c19a-1dea-4b9a-b559-bbecbe99d0b4",
+            "peid": "1501465730000042566",
+            "templateid": "1507165519281578180"
         }
 
         # Send SMS via BulkSMS gateway
@@ -360,11 +360,11 @@ async def send_otp(
         redis_key = f"otp:{request.mobile_number}"
         await redis.set(redis_key, otp, ex=300)  # 5 minutes
 
-        logger.info(f"OTP sent successfully to {request.mobile_number}")
+        logger.info(f"✅ OTP sent to {request.mobile_number} | OTP: {otp} (dev mode)")
 
         return OTPResponse(
             success=True,
-            message="OTP sent successfully"
+            message=f"OTP sent successfully to {request.mobile_number}. Valid for 5 minutes."
         )
 
     except httpx.TimeoutException:
@@ -404,31 +404,42 @@ async def verify_otp(
         redis_key = f"otp:{request.mobile_number}"
         stored_otp = await redis.get(redis_key)
 
+        logger.info(f"🔍 Verifying OTP for {request.mobile_number}")
+
         if not stored_otp:
+            logger.warning(f"❌ OTP not found or expired for {request.mobile_number}")
             return OTPResponse(
                 success=False,
                 message="OTP expired or not found. Please request a new OTP."
             )
 
-        # Verify OTP
-        if stored_otp.decode('utf-8') != request.otp:
+        # Verify OTP - handle both bytes and string from Redis
+        if isinstance(stored_otp, bytes):
+            stored_otp_str = stored_otp.decode('utf-8')
+        else:
+            stored_otp_str = str(stored_otp)
+
+        logger.info(f"🔐 Comparing OTP - Entered: {request.otp}, Stored: {stored_otp_str}")
+
+        if stored_otp_str != request.otp:
+            logger.warning(f"❌ Invalid OTP for {request.mobile_number}")
             return OTPResponse(
                 success=False,
-                message="Invalid OTP. Please try again."
+                message="Invalid OTP. Please check and try again."
             )
 
         # OTP verified successfully - delete from Redis
         await redis.delete(redis_key)
 
-        logger.info(f"OTP verified successfully for {request.mobile_number}")
+        logger.info(f"✅ OTP verified successfully for {request.mobile_number}")
 
         return OTPResponse(
             success=True,
-            message="OTP verified successfully"
+            message=f"Mobile number {request.mobile_number} verified successfully!"
         )
 
     except Exception as e:
-        logger.error(f"Error verifying OTP: {str(e)}")
+        logger.error(f"❌ Error verifying OTP: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to verify OTP. Please try again."
