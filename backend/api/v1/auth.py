@@ -7,6 +7,9 @@ from pydantic import BaseModel, EmailStr, Field
 from typing import Optional
 from datetime import timedelta
 from sqlalchemy.orm import Session
+import httpx
+import random
+import string
 
 from backend.core.security import (
     hash_password,
@@ -56,6 +59,23 @@ class TokenResponse(BaseModel):
 class RefreshTokenRequest(BaseModel):
     """Refresh token request model."""
     refresh_token: str
+
+
+class SendOTPRequest(BaseModel):
+    """Send OTP request model."""
+    mobile_number: str = Field(pattern=r"^\d{10}$", description="10-digit mobile number")
+
+
+class VerifyOTPRequest(BaseModel):
+    """Verify OTP request model."""
+    mobile_number: str = Field(pattern=r"^\d{10}$", description="10-digit mobile number")
+    otp: str = Field(min_length=6, max_length=6, description="6-digit OTP")
+
+
+class OTPResponse(BaseModel):
+    """OTP response model."""
+    success: bool
+    message: str
 
 
 # =============================================================================
@@ -279,3 +299,137 @@ async def logout():
     # await redis.sadd(f"blacklist:tokens", token)
 
     return {"message": "Successfully logged out"}
+
+
+# =============================================================================
+# OTP ENDPOINTS
+# =============================================================================
+
+def generate_otp(length: int = 6) -> str:
+    """Generate a random numeric OTP."""
+    return ''.join(random.choices(string.digits, k=length))
+
+
+@router.post("/send-otp", response_model=OTPResponse)
+async def send_otp(
+    request: SendOTPRequest,
+    redis: RedisClient = Depends(get_redis_client)
+):
+    """
+    Send OTP to mobile number via BulkSMS gateway.
+
+    Args:
+        request: Mobile number to send OTP to
+        redis: Redis client for storing OTP
+
+    Returns:
+        Success status and message
+
+    Raises:
+        HTTPException: If SMS sending fails
+    """
+    try:
+        # Generate 6-digit OTP
+        otp = generate_otp(6)
+
+        # BulkSMS API configuration
+        sms_url = "http://sms.bulksmsind.in/v2/sendSMS"
+        sms_params = {
+            "username": "myfighters",
+            "message": f"{otp} is your Wealthwarriors login verification code .SUBVRF",
+            "sendername": "SUBVRF",
+            "smstype": "TRANS",
+            "numbers": request.mobile_number,
+            "apikey": "4ea8c19a--4b9a-b559-bbecbe99d0b4",
+            "peid": "15014642566",
+            "templateid": "150716551"
+        }
+
+        # Send SMS via BulkSMS gateway
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(sms_url, params=sms_params)
+
+        if response.status_code != 200:
+            logger.error(f"SMS gateway error: {response.status_code} - {response.text}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to send OTP. Please try again."
+            )
+
+        # Store OTP in Redis with 5 minute expiry
+        redis_key = f"otp:{request.mobile_number}"
+        await redis.set(redis_key, otp, ex=300)  # 5 minutes
+
+        logger.info(f"OTP sent successfully to {request.mobile_number}")
+
+        return OTPResponse(
+            success=True,
+            message="OTP sent successfully"
+        )
+
+    except httpx.TimeoutException:
+        logger.error("SMS gateway timeout")
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail="SMS gateway timeout. Please try again."
+        )
+    except Exception as e:
+        logger.error(f"Error sending OTP: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to send OTP. Please try again."
+        )
+
+
+@router.post("/verify-otp", response_model=OTPResponse)
+async def verify_otp(
+    request: VerifyOTPRequest,
+    redis: RedisClient = Depends(get_redis_client)
+):
+    """
+    Verify OTP for mobile number.
+
+    Args:
+        request: Mobile number and OTP to verify
+        redis: Redis client for retrieving stored OTP
+
+    Returns:
+        Success status and message
+
+    Raises:
+        HTTPException: If OTP is invalid or expired
+    """
+    try:
+        # Retrieve OTP from Redis
+        redis_key = f"otp:{request.mobile_number}"
+        stored_otp = await redis.get(redis_key)
+
+        if not stored_otp:
+            return OTPResponse(
+                success=False,
+                message="OTP expired or not found. Please request a new OTP."
+            )
+
+        # Verify OTP
+        if stored_otp.decode('utf-8') != request.otp:
+            return OTPResponse(
+                success=False,
+                message="Invalid OTP. Please try again."
+            )
+
+        # OTP verified successfully - delete from Redis
+        await redis.delete(redis_key)
+
+        logger.info(f"OTP verified successfully for {request.mobile_number}")
+
+        return OTPResponse(
+            success=True,
+            message="OTP verified successfully"
+        )
+
+    except Exception as e:
+        logger.error(f"Error verifying OTP: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to verify OTP. Please try again."
+        )
