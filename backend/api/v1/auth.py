@@ -360,7 +360,11 @@ async def send_otp(
         redis_key = f"otp:{request.mobile_number}"
         await redis.set(redis_key, otp, ex=300)  # 5 minutes
 
-        logger.info(f"✅ OTP sent to {request.mobile_number} | OTP: {otp} (dev mode)")
+        # Log OTP only in development mode (NEVER in production)
+        if settings.DEBUG:
+            logger.info(f"✅ [DEV] OTP sent to {request.mobile_number} | OTP: {otp}")
+        else:
+            logger.info(f"✅ OTP sent to {request.mobile_number}")
 
         return OTPResponse(
             success=True,
