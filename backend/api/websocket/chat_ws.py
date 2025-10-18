@@ -387,8 +387,8 @@ async def handle_chat_message(websocket: WebSocket, message: dict):
         cache_key = f"ai_chat:{session.user_id}:{conversation_hash}:{message_hash}"
 
         # Check cache
-        redis_client = get_redis_client()
-        cached_response = redis_client.get(cache_key)
+        redis_client = await get_redis_client()
+        cached_response = await redis_client.get(cache_key)
 
         if cached_response:
             # Return cached response
@@ -430,7 +430,7 @@ async def handle_chat_message(websocket: WebSocket, message: dict):
         }, websocket)
 
         # Cache the response (120 seconds TTL)
-        redis_client.setex(cache_key, 120, final_response)
+        await redis_client.setex(cache_key, 120, final_response)
 
         # Add to conversation history
         session.add_message("user", user_message)
