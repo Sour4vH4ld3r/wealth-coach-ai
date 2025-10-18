@@ -37,14 +37,15 @@ router = APIRouter()
 
 class UserRegistration(BaseModel):
     """User registration request model."""
-    email: EmailStr
+    mobile_number: str = Field(pattern=r"^\d{10}$", description="10-digit mobile number")
+    email: Optional[EmailStr] = None
     password: str = Field(min_length=settings.PASSWORD_MIN_LENGTH)
     full_name: str = Field(min_length=2, max_length=100)
 
 
 class UserLogin(BaseModel):
     """User login request model."""
-    email: EmailStr
+    mobile_number: str = Field(pattern=r"^\d{10}$", description="10-digit mobile number")
     password: str
 
 
@@ -90,14 +91,14 @@ async def register(user_data: UserRegistration, db: Session = Depends(get_db)):
     Creates a new user with hashed password and returns authentication tokens.
 
     Args:
-        user_data: User registration data
+        user_data: User registration data (mobile_number required, email optional)
         db: Database session
 
     Returns:
         Access and refresh tokens
 
     Raises:
-        HTTPException: If email already exists or password is weak
+        HTTPException: If mobile number/email already exists or password is weak
     """
     if not settings.ENABLE_USER_REGISTRATION:
         raise HTTPException(
@@ -114,19 +115,29 @@ async def register(user_data: UserRegistration, db: Session = Depends(get_db)):
             detail=str(e),
         )
 
-    # Check if email already exists
-    existing_user = db.query(User).filter(User.email == user_data.email).first()
-    if existing_user:
+    # Check if mobile number already exists
+    existing_mobile = db.query(User).filter(User.mobile_number == user_data.mobile_number).first()
+    if existing_mobile:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email already registered",
+            detail="Mobile number already registered",
         )
+
+    # Check if email already exists (if provided)
+    if user_data.email:
+        existing_email = db.query(User).filter(User.email == user_data.email).first()
+        if existing_email:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email already registered",
+            )
 
     # Hash password
     hashed_password = hash_password(user_data.password)
 
     # Create new user
     new_user = User(
+        mobile_number=user_data.mobile_number,
         email=user_data.email,
         hashed_password=hashed_password,
         full_name=user_data.full_name,
@@ -137,7 +148,11 @@ async def register(user_data: UserRegistration, db: Session = Depends(get_db)):
     db.refresh(new_user)
 
     # Generate tokens
-    token_data = {"user_id": new_user.id, "email": new_user.email}
+    token_data = {
+        "user_id": new_user.id,
+        "mobile_number": new_user.mobile_number,
+        "email": new_user.email
+    }
     access_token = create_access_token(token_data)
     refresh_token = create_refresh_token(token_data)
 
@@ -155,12 +170,12 @@ async def login(
     redis: RedisClient = Depends(get_redis_client)
 ):
     """
-    Authenticate user and return tokens.
+    Authenticate user with mobile number and password.
 
-    Validates email/password and returns access and refresh tokens.
+    Validates mobile_number/password and returns access and refresh tokens.
 
     Args:
-        credentials: User login credentials
+        credentials: User login credentials (mobile_number + password)
         db: Database session
         redis: Redis client for rate limiting
 
@@ -171,7 +186,7 @@ async def login(
         HTTPException: If credentials are invalid or account is locked
     """
     # Check for account lockout
-    lockout_key = f"login_attempts:{credentials.email}"
+    lockout_key = f"login_attempts:{credentials.mobile_number}"
 
     try:
         attempts_str = await redis.get(lockout_key)
@@ -186,8 +201,8 @@ async def login(
         # Continue if Redis is unavailable
         logger.warning(f"Redis unavailable for lockout check: {e}")
 
-    # Fetch user from database by email
-    user = db.query(User).filter(User.email == credentials.email).first()
+    # Fetch user from database by mobile number
+    user = db.query(User).filter(User.mobile_number == credentials.mobile_number).first()
 
     if not user:
         # Increment failed attempts
@@ -199,11 +214,11 @@ async def login(
 
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password",
+            detail="Invalid mobile number or password",
         )
 
     # Verify password
-    if not verify_password(credentials.password, user.hashed_password):
+    if not user.hashed_password or not verify_password(credentials.password, user.hashed_password):
         # Increment failed attempts
         try:
             await redis.incr(lockout_key)
@@ -213,7 +228,7 @@ async def login(
 
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password",
+            detail="Invalid mobile number or password",
         )
 
     # Check if user is active
@@ -230,7 +245,11 @@ async def login(
         pass
 
     # Generate tokens
-    token_data = {"user_id": user.id, "email": user.email}
+    token_data = {
+        "user_id": user.id,
+        "mobile_number": user.mobile_number,
+        "email": user.email
+    }
     access_token = create_access_token(token_data)
     refresh_token = create_refresh_token(token_data)
 
@@ -239,6 +258,104 @@ async def login(
         refresh_token=refresh_token,
         expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
     )
+
+
+@router.post("/login-otp", response_model=TokenResponse)
+async def login_otp(
+    request: VerifyOTPRequest,
+    db: Session = Depends(get_db),
+    redis: RedisClient = Depends(get_redis_client)
+):
+    """
+    Authenticate user with mobile number and OTP.
+
+    Validates OTP from Redis and returns access and refresh tokens.
+
+    Args:
+        request: Mobile number and OTP
+        db: Database session
+        redis: Redis client for OTP verification
+
+    Returns:
+        Access and refresh tokens
+
+    Raises:
+        HTTPException: If OTP is invalid, expired, or user doesn't exist
+    """
+    try:
+        # Check if user exists in database
+        user = db.query(User).filter(User.mobile_number == request.mobile_number).first()
+
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found. Please register first.",
+            )
+
+        # Check if user is active
+        if not user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Account has been deactivated",
+            )
+
+        # Retrieve OTP from Redis
+        redis_key = f"otp:{request.mobile_number}"
+        stored_otp = await redis.get(redis_key)
+
+        logger.info(f"🔍 [Login-OTP] Verifying OTP for {request.mobile_number}")
+
+        if not stored_otp:
+            logger.warning(f"❌ [Login-OTP] OTP not found or expired for {request.mobile_number}")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="OTP expired or not found. Please request a new OTP.",
+            )
+
+        # Verify OTP - handle both bytes and string from Redis
+        if isinstance(stored_otp, bytes):
+            stored_otp_str = stored_otp.decode('utf-8')
+        else:
+            stored_otp_str = str(stored_otp)
+
+        logger.info(f"🔐 [Login-OTP] Comparing OTP - Entered: {request.otp}, Stored: {stored_otp_str}")
+
+        if stored_otp_str != request.otp:
+            logger.warning(f"❌ [Login-OTP] Invalid OTP for {request.mobile_number}")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid OTP. Please check and try again.",
+            )
+
+        # OTP verified successfully - delete from Redis
+        await redis.delete(redis_key)
+
+        logger.info(f"✅ [Login-OTP] OTP verified successfully for {request.mobile_number}")
+
+        # Generate tokens
+        token_data = {
+            "user_id": user.id,
+            "mobile_number": user.mobile_number,
+            "email": user.email
+        }
+        access_token = create_access_token(token_data)
+        refresh_token = create_refresh_token(token_data)
+
+        return TokenResponse(
+            access_token=access_token,
+            refresh_token=refresh_token,
+            expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        )
+
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        raise
+    except Exception as e:
+        logger.error(f"❌ [Login-OTP] Error during OTP login: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to verify OTP. Please try again.",
+        )
 
 
 @router.post("/refresh", response_model=TokenResponse)
@@ -299,6 +416,77 @@ async def logout():
     # await redis.sadd(f"blacklist:tokens", token)
 
     return {"message": "Successfully logged out"}
+
+
+# =============================================================================
+# MOBILE NUMBER & PASSWORD UTILITIES
+# =============================================================================
+
+class CheckMobileRequest(BaseModel):
+    """Check mobile number request model."""
+    mobile_number: str = Field(pattern=r"^\d{10}$", description="10-digit mobile number")
+
+
+class CheckMobileResponse(BaseModel):
+    """Check mobile number response model."""
+    exists: bool
+    message: str
+
+
+class PasswordRequirements(BaseModel):
+    """Password requirements response model."""
+    min_length: int
+    requires_uppercase: bool
+    requires_lowercase: bool
+    requires_digit: bool
+    requires_special: bool
+    special_characters: str
+
+
+@router.post("/check-mobile", response_model=CheckMobileResponse)
+async def check_mobile(request: CheckMobileRequest, db: Session = Depends(get_db)):
+    """
+    Check if mobile number exists in database.
+
+    Used by login and registration flows to validate mobile number existence.
+
+    Args:
+        request: Mobile number to check
+        db: Database session
+
+    Returns:
+        exists status and message
+    """
+    user = db.query(User).filter(User.mobile_number == request.mobile_number).first()
+
+    if user:
+        return CheckMobileResponse(
+            exists=True,
+            message=f"Mobile number {request.mobile_number} is registered"
+        )
+    else:
+        return CheckMobileResponse(
+            exists=False,
+            message=f"Mobile number {request.mobile_number} is not registered"
+        )
+
+
+@router.get("/password-requirements", response_model=PasswordRequirements)
+async def get_password_requirements():
+    """
+    Get password strength requirements.
+
+    Returns:
+        Password requirements including minimum length and character requirements
+    """
+    return PasswordRequirements(
+        min_length=settings.PASSWORD_MIN_LENGTH,
+        requires_uppercase=True,
+        requires_lowercase=True,
+        requires_digit=True,
+        requires_special=True,
+        special_characters="!@#$%^&*()_+-=[]{}|;:,.<>?"
+    )
 
 
 # =============================================================================

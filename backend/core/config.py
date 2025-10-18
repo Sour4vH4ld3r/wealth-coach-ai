@@ -121,10 +121,10 @@ class Settings(BaseSettings):
     # =========================================================================
     # RATE LIMITING
     # =========================================================================
-    RATE_LIMIT_ENABLED: bool = True  # Enabled for security
-    RATE_LIMIT_PER_MINUTE: int = 20
-    RATE_LIMIT_PER_HOUR: int = 200
-    RATE_LIMIT_PER_DAY: int = 1000
+    RATE_LIMIT_ENABLED: bool = False  # Disabled for better API performance (use production load balancer rate limiting)
+    RATE_LIMIT_PER_MINUTE: int = 60
+    RATE_LIMIT_PER_HOUR: int = 1000
+    RATE_LIMIT_PER_DAY: int = 10000
 
     CHAT_RATE_LIMIT_PER_MINUTE: int = 10
     SEARCH_RATE_LIMIT_PER_MINUTE: int = 30

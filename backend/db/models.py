@@ -3,7 +3,7 @@ SQLAlchemy database models for user management and chat history.
 """
 
 from datetime import datetime
-from sqlalchemy import Column, String, DateTime, Text, Integer, ForeignKey, Boolean
+from sqlalchemy import Column, String, DateTime, Text, Integer, ForeignKey, Boolean, Numeric, Index
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
@@ -24,8 +24,9 @@ class User(Base):
     __tablename__ = "users"
 
     id = Column(String(36), primary_key=True, default=generate_uuid)
-    email = Column(String(255), unique=True, nullable=False, index=True)
-    hashed_password = Column(String(255), nullable=False)
+    mobile_number = Column(String(10), unique=True, nullable=False, index=True)
+    email = Column(String(255), unique=True, nullable=True, index=True)
+    hashed_password = Column(String(255), nullable=True)
     full_name = Column(String(100), nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
@@ -35,7 +36,7 @@ class User(Base):
     chat_sessions = relationship("ChatSession", back_populates="user", cascade="all, delete-orphan")
 
     def __repr__(self):
-        return f"<User(id={self.id}, email={self.email})>"
+        return f"<User(id={self.id}, mobile={self.mobile_number}, email={self.email})>"
 
 
 class ChatSession(Base):
@@ -145,3 +146,120 @@ class Document(Base):
 
     def __repr__(self):
         return f"<Document(id={self.id}, content_length={len(self.content) if self.content else 0})>"
+
+
+class AllocationCategory(Base):
+    """Main allocation categories (Freedom, Health, Spending, Learning, Entertainment, Contribution)."""
+
+    __tablename__ = "allocation_categories"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    name = Column(String(50), unique=True, nullable=False)  # freedom, health, spending, etc.
+    label = Column(String(100), nullable=False)  # Display name
+    icon = Column(String(50), nullable=False)  # Icon identifier
+    icon_color = Column(String(20), nullable=False)  # Color code
+    description = Column(Text, nullable=True)
+    target_percentage = Column(Numeric(5, 2), nullable=False)  # e.g., 10.00 for 10%
+    sort_order = Column(Integer, nullable=False)  # Display order
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    # Relationships
+    allocation_types = relationship("AllocationType", back_populates="category", cascade="all, delete-orphan")
+
+    def __repr__(self):
+        return f"<AllocationCategory(id={self.id}, name={self.name})>"
+
+
+class AllocationType(Base):
+    """Investment types under each allocation category."""
+
+    __tablename__ = "allocation_types"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    category_id = Column(String(36), ForeignKey("allocation_categories.id"), nullable=False, index=True)
+    name = Column(String(200), nullable=False)  # e.g., "Bank Deposits", "Mutual Funds"
+    description = Column(Text, nullable=True)
+    purpose = Column(String(200), nullable=True)  # e.g., "Secure, low-risk savings"
+    sort_order = Column(Integer, nullable=False)  # Display order within category
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    # Relationships
+    category = relationship("AllocationCategory", back_populates="allocation_types")
+    user_allocations = relationship("UserAllocation", back_populates="allocation_type", cascade="all, delete-orphan")
+
+    def __repr__(self):
+        return f"<AllocationType(id={self.id}, name={self.name})>"
+
+
+class UserAllocation(Base):
+    """User's budget and actual spending for each allocation type."""
+
+    __tablename__ = "user_allocations"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
+    allocation_type_id = Column(String(36), ForeignKey("allocation_types.id"), nullable=False, index=True)
+
+    # Financial data
+    budget_amount = Column(Numeric(15, 2), default=0.00, nullable=False)  # Budgeted amount
+    actual_amount = Column(Numeric(15, 2), default=0.00, nullable=False)  # Actual spent/invested
+
+    # Metadata
+    month = Column(Integer, nullable=False, index=True)  # 1-12
+    year = Column(Integer, nullable=False, index=True)  # e.g., 2025
+    notes = Column(Text, nullable=True)  # Optional user notes
+
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    # Relationships
+    allocation_type = relationship("AllocationType", back_populates="user_allocations")
+
+    def __repr__(self):
+        return f"<UserAllocation(id={self.id}, user_id={self.user_id}, type_id={self.allocation_type_id})>"
+
+
+class MonthlyBudget(Base):
+    """User's monthly budget summary - tracks current balance."""
+    __tablename__ = "monthly_budgets"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=False)
+    current_balance = Column(Numeric(15, 2), default=0.00, nullable=False)  # Current balance (income - expenses)
+    total_income = Column(Numeric(15, 2), default=0.00, nullable=False)  # Sum of all income
+    total_expense = Column(Numeric(15, 2), default=0.00, nullable=False)  # Sum of all expenses
+    month = Column(Integer, nullable=False, index=True)  # 1-12
+    year = Column(Integer, nullable=False, index=True)  # e.g., 2025
+
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    # Unique constraint: one budget per user per month
+    __table_args__ = (
+        Index('idx_user_month_year', 'user_id', 'month', 'year', unique=True),
+    )
+
+    def __repr__(self):
+        return f"<MonthlyBudget(id={self.id}, user_id={self.user_id}, balance={self.current_balance})>"
+
+
+class Transaction(Base):
+    """Income and expense transactions."""
+    __tablename__ = "transactions"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
+    type = Column(String(10), nullable=False)  # 'income' or 'expense'
+    category = Column(String(50), nullable=False)  # e.g., 'salary', 'food', 'rent'
+    amount = Column(Numeric(15, 2), nullable=False)
+    label = Column(String(200), nullable=False)  # Description
+    transaction_date = Column(DateTime, nullable=False, index=True)  # When transaction occurred
+    month = Column(Integer, nullable=False, index=True)  # 1-12
+    year = Column(Integer, nullable=False, index=True)  # e.g., 2025
+
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    def __repr__(self):
+        return f"<Transaction(id={self.id}, type={self.type}, category={self.category}, amount={self.amount})>"

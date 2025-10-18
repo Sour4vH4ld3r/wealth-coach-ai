@@ -16,7 +16,7 @@ from backend.core.config import settings
 from backend.core.dependencies import get_redis_client, get_vector_db
 from backend.middleware.rate_limiter import RateLimiterMiddleware
 from backend.middleware.logging import LoggingMiddleware
-from backend.api.v1 import chat, auth, user, health, onboarding
+from backend.api.v1 import chat, auth, user, health, onboarding, allocations, transactions
 from backend.api.websocket import chat_ws
 from backend.utils.logger import setup_logger
 
@@ -167,6 +167,8 @@ app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])
 app.include_router(user.router, prefix="/api/v1/users", tags=["Users"])
 app.include_router(onboarding.router, prefix="/api/v1/onboarding", tags=["Onboarding"])
 app.include_router(chat.router, prefix="/api/v1/chat", tags=["Chat"])
+app.include_router(allocations.router, prefix="/api/v1", tags=["Allocations"])
+app.include_router(transactions.router, prefix="/api/v1", tags=["Transactions"])
 
 # WebSocket routes
 if settings.WS_ENABLED:

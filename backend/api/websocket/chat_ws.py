@@ -9,13 +9,20 @@ from typing import Dict, Set
 import json
 import asyncio
 from datetime import datetime
+from sqlalchemy import text
 
 from backend.core.security import decode_token
 from backend.core.config import settings
 from backend.utils.logger import setup_logger
+from backend.services.llm.client import LLMClient
+from backend.core.dependencies import get_redis_client
+from backend.db.database import get_db
 
 router = APIRouter()
 logger = setup_logger(__name__)
+
+# Initialize LLM client
+llm_client = LLMClient(cache_client=get_redis_client())
 
 # Active WebSocket connections per user
 active_connections: Dict[str, Set[WebSocket]] = {}
@@ -70,6 +77,67 @@ class ConnectionManager:
 
 
 manager = ConnectionManager()
+
+
+async def get_user_profile_context(user_id: str) -> str:
+    """Fetch user profile data and create personalized context for AI."""
+    try:
+        db = next(get_db())
+        result = db.execute(text("""
+            SELECT
+                u.full_name,
+                up.age_range,
+                up.occupation,
+                up.income_range,
+                up.financial_goals,
+                up.investment_experience,
+                up.risk_tolerance,
+                up.current_investments,
+                up.debt_status,
+                up.retirement_planning
+            FROM users u
+            LEFT JOIN user_profiles up ON u.id = up.user_id
+            WHERE u.id = :user_id
+        """), {"user_id": user_id})
+
+        user = result.fetchone()
+
+        if not user or not user[1]:  # No profile data
+            return ""
+
+        # Build personalized context
+        context_parts = []
+
+        if user[0]:  # full_name
+            context_parts.append(f"User: {user[0]}")
+        if user[1]:  # age_range
+            context_parts.append(f"Age: {user[1]}")
+        if user[2]:  # occupation
+            context_parts.append(f"Occupation: {user[2]}")
+        if user[3]:  # income_range
+            context_parts.append(f"Income: {user[3]}")
+        if user[4]:  # financial_goals
+            context_parts.append(f"Goals: {user[4]}")
+        if user[5]:  # investment_experience
+            context_parts.append(f"Investment Experience: {user[5]}")
+        if user[6]:  # risk_tolerance
+            context_parts.append(f"Risk Tolerance: {user[6]}")
+        if user[7]:  # current_investments
+            context_parts.append(f"Current Investments: {user[7]}")
+        if user[8]:  # debt_status
+            context_parts.append(f"Debt: {user[8]}")
+        if user[9]:  # retirement_planning
+            retirement_status = "planning for retirement" if user[9] else "not yet planning retirement"
+            context_parts.append(f"Retirement: {retirement_status}")
+
+        if context_parts:
+            return "\n\nUser Profile:\n" + "\n".join(f"- {part}" for part in context_parts)
+
+        return ""
+
+    except Exception as e:
+        logger.error(f"Error fetching user profile: {e}")
+        return ""
 
 
 @router.websocket("/chat")
@@ -187,32 +255,58 @@ async def handle_chat_message(websocket: WebSocket, user_id: str, message: dict)
         }, websocket)
         return
 
-    # TODO: Integrate with LLM service for streaming
-    # For now, send mock streaming response
+    try:
+        # Fetch user profile for personalized context
+        user_context = await get_user_profile_context(user_id)
 
-    # Simulate streaming response
-    mock_response = "I'm here to help with your financial questions. This is a placeholder response that will be replaced with actual AI-generated content."
+        # Build personalized system prompt
+        base_prompt = (
+            "You are a helpful financial assistant for Wealth Warriors Hub. "
+            "Provide clear, concise, and actionable financial advice. "
+            "Keep responses brief and focused. "
+            "If you need more information to give accurate advice, ask clarifying questions."
+        )
 
-    words = mock_response.split()
-    accumulated = ""
+        # Add user context if available
+        system_prompt = base_prompt + user_context if user_context else base_prompt
 
-    for word in words:
-        accumulated += word + " "
+        # Prepare messages for LLM
+        messages = [
+            {
+                "role": "system",
+                "content": system_prompt
+            },
+            {
+                "role": "user",
+                "content": user_message
+            }
+        ]
+
+        # Stream response from LLM
+        accumulated = ""
+        async for chunk in llm_client.chat_stream(messages, max_tokens=300, temperature=0.7):
+            accumulated += chunk
+            await manager.send_message({
+                "type": "response",
+                "content": accumulated,
+                "done": False,
+                "timestamp": datetime.utcnow().isoformat(),
+            }, websocket)
+
+        # Final message
         await manager.send_message({
             "type": "response",
-            "content": accumulated,
-            "done": False,
+            "content": accumulated.strip(),
+            "done": True,
             "timestamp": datetime.utcnow().isoformat(),
         }, websocket)
-        await asyncio.sleep(0.1)  # Simulate streaming delay
 
-    # Final message
-    await manager.send_message({
-        "type": "response",
-        "content": accumulated.strip(),
-        "done": True,
-        "timestamp": datetime.utcnow().isoformat(),
-    }, websocket)
+    except Exception as e:
+        logger.error(f"Error streaming AI response: {e}", exc_info=True)
+        await manager.send_message({
+            "type": "error",
+            "message": "Failed to generate response. Please try again.",
+        }, websocket)
 
 
 @router.websocket("/notifications")
