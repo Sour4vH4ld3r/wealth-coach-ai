@@ -67,9 +67,7 @@ class ConnectionManager:
         self.sessions: Dict[WebSocket, SessionData] = {}
 
     async def connect(self, websocket: WebSocket, user_id: str, user_profile: dict):
-        """Accept and register WebSocket connection with session data."""
-        await websocket.accept()
-
+        """Register WebSocket connection with session data (connection already accepted)."""
         if user_id not in active_connections:
             active_connections[user_id] = set()
 
