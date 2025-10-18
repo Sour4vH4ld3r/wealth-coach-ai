@@ -46,7 +46,7 @@ async def lifespan(app: FastAPI):
         # Initialize Redis (optional - continue without it)
         try:
             redis_client = get_redis_client()
-            redis_client.ping()
+            await redis_client.ping()
             logger.info("✓ Redis connection established")
         except Exception as redis_error:
             logger.warning(f"⚠️  Redis not available: {redis_error}. Caching disabled.")
