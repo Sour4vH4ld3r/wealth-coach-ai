@@ -45,8 +45,8 @@ async def lifespan(app: FastAPI):
     try:
         # Initialize Redis (optional - continue without it)
         try:
-            redis_client = await get_redis_client()
-            await redis_client.ping()
+            redis_client = get_redis_client()
+            redis_client.ping()
             logger.info("✓ Redis connection established")
         except Exception as redis_error:
             logger.warning(f"⚠️  Redis not available: {redis_error}. Caching disabled.")
@@ -75,13 +75,21 @@ async def lifespan(app: FastAPI):
     # Shutdown tasks
     logger.info("Shutting down Wealth Coach AI Assistant...")
     try:
-        # Close Redis connections
-        await redis_client.close()
-        logger.info("✓ Redis connections closed")
+        # Close Redis connections (Redis client is synchronous, no async close needed)
+        try:
+            redis_client = get_redis_client()
+            if hasattr(redis_client, 'close'):
+                redis_client.close()
+            logger.info("✓ Redis connections closed")
+        except Exception as redis_err:
+            logger.warning(f"Redis cleanup skipped: {redis_err}")
 
         # Persist vector database
-        vector_db.persist()
-        logger.info("✓ Vector database persisted")
+        try:
+            vector_db.persist()
+            logger.info("✓ Vector database persisted")
+        except Exception as vdb_err:
+            logger.warning(f"Vector DB persist skipped: {vdb_err}")
 
     except Exception as e:
         logger.error(f"Shutdown error: {e}")
