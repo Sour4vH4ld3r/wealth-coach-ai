@@ -20,9 +20,17 @@
 
 ### WebSocket Endpoint
 
+**Development:**
 ```
-ws://192.168.1.3:8000/ws/chat?token=YOUR_JWT_TOKEN
+ws://192.168.1.12:8000/ws/chat?token=YOUR_JWT_TOKEN
 ```
+
+**Production:**
+```
+wss://api.wealthwarriorshub.in/ws/chat?token=YOUR_JWT_TOKEN
+```
+
+⚠️ **Important:** Use `wss://` (WebSocket Secure) for production, not `https://`
 
 ### Authentication
 
@@ -91,8 +99,11 @@ export const useAIChat = (authToken) => {
       return;
     }
 
-    // Replace with your actual server IP
-    const WS_URL = `ws://192.168.1.3:8000/ws/chat?token=${authToken}`;
+    // Production URL (use this in production)
+    const WS_URL = `wss://api.wealthwarriorshub.in/ws/chat?token=${authToken}`;
+
+    // Development URL (use this for local testing)
+    // const WS_URL = `ws://192.168.1.12:8000/ws/chat?token=${authToken}`;
 
     try {
       wsRef.current = new WebSocket(WS_URL);
