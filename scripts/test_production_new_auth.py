@@ -14,13 +14,14 @@ from datetime import datetime
 WSS_URL = "wss://api.wealthwarriorshub.in/ws/chat"
 
 # Production token (fresh)
-TEST_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiNjE1NWRjMzUtYTMxNy00YTljLWJlNzQtYTNiZWM3ZTYzMmNiIiwibW9iaWxlX251bWJlciI6IjYyOTczNjk4MzIiLCJlbWFpbCI6InNvdXJhdjEyM0BnbWFpbC5jb20iLCJleHAiOjE3NjA4MTQ5NjYsImlhdCI6MTc2MDgxMzE2NiwidHlwZSI6ImFjY2VzcyJ9.vxojBrMxvlXzEPQtNmlkKfd1jdBOZkA0ABJnnYHO5_M"
+TEST_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiNjE1NWRjMzUtYTMxNy00YTljLWJlNzQtYTNiZWM3ZTYzMmNiIiwibW9iaWxlX251bWJlciI6IjYyOTczNjk4MzIiLCJlbWFpbCI6InNvdXJhdjEyM0BnbWFpbC5jb20iLCJleHAiOjE3NjA4MTYwODQsImlhdCI6MTc2MDgxNDI4NCwidHlwZSI6ImFjY2VzcyJ9.0LLPOPqQ57ex5h9iEu_ibwjaVA1PRZBtZDVtEOUaiZA"
 
 # Test questions
 TEST_QUESTIONS = [
-    "What is SIP?",
-    "How much should I invest in SIP monthly?",
-    "What did you just tell me about SIP?",  # Tests conversation memory
+    "What are mutual funds?",
+    "What's the difference between equity and debt funds?",
+    "Should I invest in gold?",
+    "Based on what we discussed, which investment is best for me?",  # Tests conversation memory
 ]
 
 class Colors:
@@ -178,7 +179,7 @@ async def test_production_new_auth():
             if passed == total:
                 print(f"\n{Colors.GREEN}✅ ALL TESTS PASSED!{Colors.END}")
                 print(f"\n{Colors.MAGENTA}🧠 Conversation History Test:{Colors.END}")
-                print(f"   Question 3 asked 'What did you just tell me about SIP?'")
+                print(f"   Question 4 asked 'Based on what we discussed, which investment is best for me?'")
                 print(f"   If AI referenced previous answers, conversation history is working!")
                 return True
             else:
