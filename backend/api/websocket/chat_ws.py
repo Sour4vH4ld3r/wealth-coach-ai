@@ -430,7 +430,7 @@ async def handle_chat_message(websocket: WebSocket, message: dict):
         }, websocket)
 
         # Cache the response (120 seconds TTL)
-        await redis_client.setex(cache_key, 120, final_response)
+        await redis_client.set(cache_key, final_response, ex=120)
 
         # Add to conversation history
         session.add_message("user", user_message)
