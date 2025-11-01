@@ -1,3 +1,4 @@
+root@srv1098486:~/opt/wealth-coach-ai# cat docker-compose.backend.yml
 # =============================================================================
 # BACKEND-ONLY DOCKER COMPOSE CONFIGURATION
 # Wealth Coach AI - Backend API Deployment
@@ -14,10 +15,19 @@ services:
       args:
         - BUILD_ENV=production
     container_name: wealth_coach_backend
-    user: "1000:1000" #added this line 
+    user: "1000:1000" #added this line
     restart: always
     ports:
       - "8000:8000"
+    command: >
+        gunicorn backend.main:app
+        --workers 1
+        --worker-class uvicorn.workers.UvicornWorker
+        --bind 0.0.0.0:8000
+        --timeout 120
+        --access-logfile -
+        --error-logfile -
+        --log-level info
     environment:
       - ENVIRONMENT=production
       - DEBUG=false
@@ -27,12 +37,10 @@ services:
       - DATABASE_URL=${DATABASE_URL}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
-      #- CORS_ORIGINS=${CORS_ORIGINS}
     env_file:
       - .env
     volumes:
      # - ./logs:/app/logs
-      - ./.env:/app/.env:ro  # Mount .env file at runtime
       - ./data/knowledge_base:/app/data/knowledge_base:ro
       - huggingface_cache:/home/appuser/.cache  # ADDed THIS LINE
     networks:
@@ -78,3 +86,4 @@ volumes:
     driver: local
   huggingface_cache:
     driver: local
+root@srv1098486:~/opt/wealth-coach-ai#

@@ -56,12 +56,9 @@ async def lifespan(app: FastAPI):
         vector_db = get_vector_db()
         logger.info("✓ Vector database loaded")
 
-        # Warm up embedding model (first load is slow)
-        logger.info("Loading embedding model (this may take a moment)...")
-        from backend.services.rag.embeddings import EmbeddingService
-        embedding_service = EmbeddingService()
-        _ = embedding_service.embed_query("warmup query")
-        logger.info("✓ Embedding model warmed up")
+        # Note: Embedding model now uses lazy loading
+        # It will be loaded automatically on first RAG query
+        logger.info("✓ Embedding service configured (lazy loading enabled)")
 
         logger.info(f"🚀 Server ready on {settings.HOST}:{settings.PORT}")
         logger.info(f"📚 API Docs: http://{settings.HOST}:{settings.PORT}/docs")

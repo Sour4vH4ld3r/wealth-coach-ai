@@ -45,21 +45,54 @@ class EmbeddingService:
     self.cache_client = cache_client
     self.cache_ttl = settings.EMBEDDING_CACHE_TTL
 
-    # Load the model
-    logger.info(f"Loading embedding model: {self.model_name}")
-    try:
-      self.model = SentenceTransformer(self.model_name)
-      self.embedding_dimension = self.model.get_sentence_embedding_dimension()
-      logger.info(
-        f"Embedding model loaded successfully. Dimension: {self.embedding_dimension}"
-      )
-    except Exception as e:
-      logger.error(f"Failed to load embedding model: {e}")
-      raise
+    # Lazy loading: Model will be loaded on first use
+    self._model: Optional[SentenceTransformer] = None
+    self._embedding_dimension: Optional[int] = None
+    self._model_loading = False
+    logger.info(f"Embedding service initialized (model will load on first use)")
 
     # Statistics
     self.cache_hits = 0
     self.cache_misses = 0
+
+  @property
+  def model(self) -> SentenceTransformer:
+    """
+    Get the embedding model, loading it lazily on first access.
+
+    Returns:
+      SentenceTransformer: The loaded model instance
+    """
+    if self._model is None:
+      if not self._model_loading:
+        self._model_loading = True
+        logger.info(f"Loading embedding model on first use: {self.model_name}")
+        try:
+          self._model = SentenceTransformer(self.model_name)
+          self._embedding_dimension = self._model.get_sentence_embedding_dimension()
+          logger.info(
+            f"Embedding model loaded successfully. Dimension: {self._embedding_dimension}"
+          )
+        except Exception as e:
+          self._model_loading = False
+          logger.error(f"Failed to load embedding model: {e}")
+          raise
+        finally:
+          self._model_loading = False
+    return self._model
+
+  @property
+  def embedding_dimension(self) -> int:
+    """
+    Get embedding dimension, loading model if necessary.
+
+    Returns:
+      int: Dimension of embeddings produced by the model
+    """
+    if self._embedding_dimension is None:
+      # Access model property to trigger lazy loading
+      _ = self.model
+    return self._embedding_dimension
 
   def _get_cache_key(self, text: str) -> str:
     """
