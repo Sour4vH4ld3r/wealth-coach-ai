@@ -1,4 +1,4 @@
-# Domain Setup Guide - Wealth Warriors Hub
+i# Domain Setup Guide - Wealth Warriors Hub
 # Complete Nginx Configuration for Production Deployment
 
 ## Overview
@@ -116,7 +116,7 @@ sudo ufw status
 
 Visit `http://YOUR_SERVER_IP` in browser - you should see the Nginx welcome page.
 
----
+--- completed ...............
 
 ## Configure Backend API
 
@@ -188,6 +188,11 @@ server {
 ```bash
 # Create symbolic link
 sudo ln -s /etc/nginx/sites-available/api.wealthwarriorshub.in /etc/nginx/sites-enabled/
+
+
+sudo nano /etc/nginx/sites-available/sujoydasmotivation.com
+# sudo ln -s /etc/nginx/sites-available/sujoydasmotivation.com /etc/nginx/sites-enabled/
+
 
 # Test configuration
 sudo nginx -t
@@ -465,6 +470,10 @@ sudo certbot --nginx -d webchat.wealthwarriorshub.in
 
 # Get certificate for landing page (including www)
 sudo certbot --nginx -d wealthwarriorshub.in -d www.wealthwarriorshub.in
+
+sudo certbot --nginx -d sujoydasmotivation.com -d www.sujoydasmotivation.com
+
+sudo certbot --nginx -d souravhalder.in -d www.souravhalder.in -d dev.souravhalder.in
 ```
 
 **During setup:**

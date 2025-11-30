@@ -223,10 +223,12 @@ async def send_message(
 
     db.commit()
 
-    # Prepare response
+    # Prepare response - convert sources from list of strings to list of dicts
+    sources_formatted = [{"source": s} for s in sources] if sources else []
+
     chat_response = ChatResponse(
         response=response_text,
-        sources=sources,
+        sources=sources_formatted,
         tokens_used=tokens_used,
         timestamp=datetime.utcnow(),
         conversation_id=session.id,
